@@ -1,6 +1,6 @@
-# Sample Hardhat Project
+# Cloudax NFT-Marketplace Backend
 
-This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, and a script that deploys that contract.
+An NFT Marketplace built on ETHEREUM Blockchain
 
 Try running some of the following tasks:
 
