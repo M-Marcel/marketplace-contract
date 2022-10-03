@@ -55,7 +55,7 @@ contract NftMarketplace is ReentrancyGuard {
     using Counters for Counters.Counter;
     Counters.Counter private _itemIds;
     Counters.Counter private _itemsSold;
-    uint256 listPrice = 0.01 ether;
+    uint256 listPrice;
     address payable owner;
 
     constructor() {
@@ -198,6 +198,13 @@ contract NftMarketplace is ReentrancyGuard {
         emit ItemBought(msg.sender, nftAddress, tokenId, listedItem.price);
     }
 
+    function buyTokenUnminted() public payable {}
+
+
+    function buyTokenMinted(
+      ) public payable {}
+    
+
     // Getter functions
     function getListing(address nftAddress, uint256 tokenId)
         external
@@ -209,5 +216,17 @@ contract NftMarketplace is ReentrancyGuard {
 
      function getListingPrice() public view returns (uint256){
         return listingPrice;
+    }
+
+    function getListing(address nftAddress, uint256 tokenId)
+        external
+        view
+        returns (Listing memory)
+    {
+        return s_listings[nftAddress][tokenId];
+    }
+
+    function getProceeds(address seller) external view returns (uint256) {
+        return s_proceeds[seller];
     }
 }
