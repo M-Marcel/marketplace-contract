@@ -113,6 +113,17 @@ module.exports = {
       {
         version: "0.4.24",
       },
+      {
+        version: "0.8.4",
+      },
+      {
+        version: "0.8.2",
+      },
+      {
+        version: "0.8.1",
+      },{
+        version: "0.8.0",
+      }
     ],
   },
   mocha: {
