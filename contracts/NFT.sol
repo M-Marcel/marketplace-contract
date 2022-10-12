@@ -1,36 +1,46 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.17;
+pragma solidity 0.8.10;
 
-import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
-import "@openzeppelin/contracts/utils/Counters.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import '@openzeppelin/contracts-upgradeable/utils/CountersUpgradeable.sol';
 
-contract NFT is ERC721URIStorage {
-    //auto-increment field for each token
-    using Counters for Counters.Counter;
-    Counters.Counter private _tokenIds;
+contract CloudaxNFT is Initializable, 
+                         ERC721Upgradeable, 
+                         OwnableUpgradeable, 
+                         UUPSUpgradeable {
+    // ================================
+    // STORAGE
+    // ================================
 
-    //address of the NFT market place
-    //https://t.me/techjobsng
+    string internal contractBaseURI;
 
-    address contractAddress;
+function initialize(
+        address _owner,
+        string memory _name,
+        string memory _symbol,
+        string memory _contractBaseURI
+    ) public initializer {
+        __ERC721_init(_name, _symbol);
+        __Ownable_init();
+        __UUPSUpgradeable_init();
+        // Set ownership to original sender of contract call
+        transferOwnership(_owner);
 
-    constructor(address marketplaceAddress) ERC721("Cloudax Tokend", "CDAXT") {
-        contractAddress = marketplaceAddress;
+        // E.g.  https://cloudaxnftmarketplace.xyz/metadata/contract/{userId}
+        contractBaseURI = _contractBaseURI;
     }
 
-    /// @notice create a new token
-    /// @param tokenURI : token URI
-    function createToken(string memory tokenURI) public returns (uint256) {
-        //set a new token id for the token to be minted
-        _tokenIds.increment();
-        uint256 newItemId = _tokenIds.current();
-
-        _mint(msg.sender, newItemId); //mint the token
-        _setTokenURI(newItemId, tokenURI); //generate the URI
-        setApprovalForAll(contractAddress, true); //grant transaction permission to marketplace
-
-        //return token ID
-        return newItemId;
+    /// @notice Returns contract URI of an NFT to be used on Opensea. e.g. https://cloudaxnftmarketplace.xyz/metadata/contract/{userId}/storefront
+    function contractURI() public view returns (string memory) {
+        // Concatenate the components, contractBaseURI to create contract URI for Opensea.
+        return string(abi.encodePacked(contractBaseURI, 'storefront'));
     }
-}
+
+    function _authorizeUpgrade(address newImplementation)
+        internal
+        onlyOwner
+        override
+    {}
