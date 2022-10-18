@@ -1,0 +1,83 @@
+.mainContainer {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  margin-top: 64px;
+}
+
+.dataContainer {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  max-width: 600px;
+}
+
+.header {
+  text-align: center;
+  font-size: 32px;
+  font-weight: 600;
+}
+
+.bio {
+  text-align: center;
+  color: gray;
+  margin-top: 16px;
+}
+
+.waveButton {
+  cursor: pointer;
+  margin-top: 16px;
+  padding: 8px;
+  border: 0;
+  border-radius: 5px;
+}
+.form-control {
+  height: 50px;
+  border: #9d9999 solid 1px;
+  margin-top: 10px;
+}
+.form-control:focus {
+  height: 50px;
+  border: #9d9999 solid 2px;
+  outline: none;
+}
+.notification {
+  color: white;
+  background: #dc3545;
+  margin-bottom: 10px;
+}
+.notification p {
+  color: white;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+.btnWarning{
+  background: #ffc107;
+  color: black;
+}
+.btnInfo{
+  color: #fff;
+  background-color: #17a2b8;
+  border-color: #17a2b8;
+}
+
+.bgWarning{
+  background: #ffc107;
+  color: black;
+  padding: 10px;
+  box-shadow: 1px 1px 5px #745e5e;
+}
+.bgDanger{
+  color: #fff;
+  background-color: #dc3545;
+  border-color: #dc3545;
+  padding: 10px;
+  box-shadow: 1px 1px 5px #745e5e;
+}
+.bgInfo{
+  color: #fff;
+  background-color: #17a2b8;
+  border-color: #17a2b8;
+  padding: 10px;
+  box-shadow: 1px 1px 5px #745e5e;
+}
