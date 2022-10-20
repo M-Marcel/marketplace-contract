@@ -8,7 +8,7 @@ import "./CloudaxNFT.sol";
 
  ////Custom Errors
     error InvalidAddress();
-    error QuantityRequired(uint256 sent, uint256 minRequired);
+    error QuantityRequired(uint256 quantity, uint256 minRequired);
     error QuantityDoesNotExist(uint256 availableQuantity);
     error InvalidItemId(uint256 itemId);
     error ItemSoldOut(uint256 quantity, uint256 numSold);
@@ -37,12 +37,11 @@ contract NftMarketplace is
     // structs for an item to be listed
     struct ListedItem {
         uint256 itemId;
-        address payable seller;
-        address payable owner;
+        address payable fundingRecipient;
         uint256 price;
-        uint32 numSold;
         uint32 quantity;
-
+        uint32 numSold;
+        uint32 royaltyBPS;
     }
 
     ///Mapping a user's address to the tokens created
@@ -65,9 +64,10 @@ contract NftMarketplace is
     ///Emitted when a Item is created
     event ItemCreated(
         uint256 indexed itemId,
-        address owner,
+        address payable fundingRecipient,
         uint256 price,
-        uint32 quantity
+        uint32 quantity,
+        uint32 royaltyBPS
     );
 
     ///Emitted when a new NFT is created
@@ -89,6 +89,50 @@ contract NftMarketplace is
         string  soldItemBaseURI
     );
 
+
+    /// @notice Creates a new NFT item.
+    /// @param _fundingRecipient The account that will receive sales revenue.
+    /// @param _price The price at which each copy of NFT item or token from a NFT item will be sold, in ETH.
+    /// @param _quantity The maximum number of NFT item's copy or tokens that can be sold.
+    /// @param _royaltyBPS The royalty amount in bps per copy of a NFT item.
+    function createItem(
+        address payable _fundingRecipient,
+        uint256 _price,
+        uint32 _quantity,
+        uint32 _royaltyBPS
+    ) external //// onlyOwner
+    {
+        // Validations
+         if (_fundingRecipient == address(0)) {
+            revert InvalidAddress();
+        }
+
+        // Check that the track's quantity is more than zero(0).
+        // require(_quantity > 0, "Track quantity must not be less than 0");
+        if (_quantity <= 0) {
+            revert QuantityRequired({quantity: _quantity,minRequired: 1});
+        }
+
+        listedItemId.increment();
+        uint256 newItemId = listedItemId.current();
+        listedItems[newItemId] = ListedItem({
+            itemId: newItemId,
+            fundingRecipient: _fundingRecipient,
+            price: _price,
+            numSold: 0,
+            quantity: _quantity,
+            royaltyBPS: _royaltyBPS
+        });
+
+        emit ItemCreated(
+            newItemId,
+            _fundingRecipient,
+            0,
+            _quantity,
+            _royaltyBPS
+        );
+        
+    }
 
     /// @notice Creates a new NFT for a user
     /// @param _owner The address of the user that owns this NFT
