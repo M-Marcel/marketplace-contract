@@ -1,20 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.10;
 
-// import "@openzeppelin/contracts-upgradeable/utils/CountersUpgradeable.sol";
-// import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721URIStorageUpgradeable.sol";
-// import "@openzeppelin/contracts-upgradeable/utils/StringsUpgradeable.sol";
-
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "./CloudaxNFT.sol";
-// import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC721Upgradeable.sol";
-// import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-// import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-// import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 ////Custom Errors
 error InvalidAddress();
@@ -269,12 +261,6 @@ contract CloudaxNftMarketplace is
 
         return super.tokenURI(_tokenId);
     }
-
-    // function _authorizeUpgrade(address newImplementation)
-    //     internal
-    //     override
-    //     onlyOwner
-    // {}
 
     function getPlatformName() public view virtual returns (string memory) {
         return _platformName;

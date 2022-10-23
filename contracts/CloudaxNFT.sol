@@ -1,12 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.10;
 
-// import "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
-// import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-// import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-// import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-// import "@openzeppelin/contracts-upgradeable/utils/CountersUpgradeable.sol";
-
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
@@ -25,9 +19,6 @@ contract CloudaxNFT is ERC721, Ownable {
         string memory _symbol,
         string memory _contractBaseURI
     ) ERC721(_name, _symbol) {
-        // ERC721(_name, _symbol);
-        // __Ownable_init();
-        // __UUPSUpgradeable_init();
         // Set ownership to original sender of contract call
         transferOwnership(_owner);
 
@@ -40,10 +31,4 @@ contract CloudaxNFT is ERC721, Ownable {
         // Concatenate the components, contractBaseURI to create contract URI for Opensea.
         return string(abi.encodePacked(contractBaseURI, "storefront"));
     }
-
-    // function _authorizeUpgrade(address newImplementation)
-    //     internal
-    //     override
-    //     onlyOwner
-    // {}
 }
