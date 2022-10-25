@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import "./CloudaxNFT.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
 ////Custom Errors
 error InvalidAddress();
@@ -15,6 +15,8 @@ error QuantityDoesNotExist(uint256 availableQuantity);
 error InvalidItemId(uint256 itemId);
 error ItemSoldOut(uint256 quantity, uint256 numSold);
 error InsufficientFund(uint256 price, uint256 allowedFund);
+error CannotSendFund(uint256 senderBalance, uint256 fundTosend);
+error CannotSendZero(uint256 fundTosend);
 
 contract CloudaxNftMarketplace is
     ReentrancyGuard,
@@ -26,15 +28,6 @@ contract CloudaxNftMarketplace is
     Counters.Counter private tokenId;
     Counters.Counter private listedItemId;
 
-    ///This struct describes the main NFT of a user
-    struct UserToken {
-        uint256 tokenId;
-        string name;
-        string symbol;
-        address owner;
-        address tokenAddress;
-    }
-
     // structs for an item to be listed
     struct ListedItem {
         uint256 itemId;
@@ -45,8 +38,19 @@ contract CloudaxNftMarketplace is
         uint32 royaltyBPS;
     }
 
-    ///Mapping a user's address to the tokens created
-    mapping(address => UserToken[]) private addressToTokens;
+    // Structure to define auction properties
+    struct Auction {
+        uint256 index; // Auction Index
+        address addressNFTCollection; // Address of the ERC721 NFT Collection contract
+        address addressPaymentToken; // Address of the ERC20 Payment Token contract
+        uint256 nftId; // NFT Id
+        address creator; // Creator of the Auction
+        address payable currentBidOwner; // Address of the highest bider
+        uint256 currentBidPrice; // Current highest bid for the auction
+        uint256 endAuction; // Timestamp for the end day&time of the auction
+        uint256 bidCount; // Number of bid placed on the auction
+    }
+
     //Mapping of items to a Item struct
     mapping(uint256 => ListedItem) public listedItems;
     ///Mapping an Item to the token copies minted from it.
@@ -56,8 +60,9 @@ contract CloudaxNftMarketplace is
     // Total amount earned by Seller... mapping of address -> Amount earned
     mapping(address => uint256) private s_proceeds;
     // mapping(uint256 => uint256) public depositedForEdition;
-
-    string private _platformName;
+    string public baseTokenURI;
+    string private contractBaseURI;
+    uint256 private serviceFee;
 
     // ================================
     // EVENTS
@@ -72,16 +77,6 @@ contract CloudaxNftMarketplace is
         uint32 royaltyBPS
     );
 
-    ///Emitted when a new NFT is created
-    event tokenCreated(
-        uint256 indexed tokenId,
-        string name,
-        string symbol,
-        address owner,
-        address tokenAddress,
-        string contractBaseURI
-    );
-
     ///Emitted when a copy of an item is sold
     event itemCopySold(
         uint256 indexed soldItemCopyId,
@@ -91,7 +86,25 @@ contract CloudaxNftMarketplace is
         string soldItemBaseURI
     );
 
-    constructor() ERC721("Cloudax", "CLDX") {}
+    constructor() ERC721("Cloudax", "CLDX") {
+         contractBaseURI = "";
+    }
+
+    /// @notice Returns contract URI of an NFT to be used on Opensea. e.g. https://cloudaxnftmarketplace.xyz/metadata/opensea-storefront
+    function contractURI() public view returns (string memory) {
+        // Concatenate the components, contractBaseURI to create contract URI for Opensea.
+        return contractBaseURI;
+    }
+
+    // This function is used to update or set the CloudaxNFT Base for Opensea compatibiblity
+    function setContractBaseURI(string memory _contractBaseURI) public onlyOwner{
+        contractBaseURI = _contractBaseURI;
+    }
+
+    // This function is used to update or set the CloudaxNFT Listing price
+    function setServiceFee(uint256 _serviceFee) public onlyOwner{
+        serviceFee = _serviceFee;
+    }
 
     /// @notice Creates a new NFT item.
     /// @param _fundingRecipient The account that will receive sales revenue.
@@ -133,51 +146,6 @@ contract CloudaxNftMarketplace is
             _quantity,
             _royaltyBPS
         );
-    }
-
-    /// @notice Creates a new NFT for a user
-    /// @param _owner The address of the user that owns this NFT
-    /// @param _name The name of this NFT
-    /// @param _symbol The symbol of this NFT
-    /// @param _contractBaseURI The address of the new NFT to be created for a user
-    function createToken(
-        address _owner,
-        string memory _name,
-        string memory _symbol,
-        string memory _contractBaseURI
-    ) external returns (bool) {
-        // Spin up new ERC721 token contract for the user
-        CloudaxNFT erc721 = new CloudaxNFT(
-            _owner,
-            _name,
-            _symbol,
-            _contractBaseURI
-        );
-        // erc721.initialize(_owner, _name, _symbol, _contractBaseURI);
-
-        address _tokenAddress = address(erc721);
-
-        // Save token data
-        address sender = msg.sender;
-        tokenId.increment();
-        uint256 currentTokenId = tokenId.current();
-
-        UserToken[] storage tokens = addressToTokens[sender];
-        tokens.push(
-            UserToken(currentTokenId, _name, _symbol, sender, _tokenAddress)
-        );
-        addressToTokens[sender] = tokens;
-        // Emit and return
-        emit tokenCreated(
-            currentTokenId,
-            _name,
-            _symbol,
-            sender,
-            _tokenAddress,
-            _contractBaseURI
-        );
-
-        return true;
     }
 
     /// @notice Creates or mints a new copy or token for the given item, and assigns it to the buyer
@@ -225,6 +193,10 @@ contract CloudaxNftMarketplace is
             abi.encodePacked(_tokenBaseURI, "/", Strings.toString(newTokenId))
         );
 
+         // Send funds to the funding recipient.
+        _sendFunds(listedItems[_itemId].fundingRecipient, msg.value);
+        depositedForItem[_itemId] += msg.value;
+
         // Mint a new copy or token from the Item for the buyer, using the `newTokenId`.
         safeMint(msg.sender, newTokenId, _tokenBaseURI);
         // Store the mapping of the ID a sold item's copy or token id to the Item being purchased.
@@ -237,6 +209,20 @@ contract CloudaxNftMarketplace is
             msg.sender,
             _tokenBaseURI
         );
+    }
+
+    /// @notice Sends funds to an address
+    /// @param _recipient The address to send funds to
+    /// @param _amount The amount of funds to send
+    function _sendFunds(address payable _recipient, uint256 _amount) private {
+
+        (bool success, ) = _recipient.call{value: _amount}('');
+        if(_amount <= 0){
+            revert CannotSendZero({fundTosend: _amount});
+        }
+        if(!success){
+            revert CannotSendFund({senderBalance: address(_recipient).balance, fundTosend: _amount});
+        }
     }
 
     function safeMint(
@@ -262,9 +248,9 @@ contract CloudaxNftMarketplace is
         return super.tokenURI(_tokenId);
     }
 
-    function getPlatformName() public view virtual returns (string memory) {
-        return _platformName;
-    }
+    // function getPlatformName() public view virtual returns (string memory) {
+    //     return _platformName;
+    // }
 
     function _burn(uint256 _tokenId)
         internal
