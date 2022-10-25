@@ -1,6 +1,6 @@
 require("@nomiclabs/hardhat-waffle");
 require('@openzeppelin/hardhat-upgrades');
-
+require('@nomiclabs/hardhat-etherscan');
 module.exports = {
   // solidity: "0.8.0",
   solidity: {
@@ -120,5 +120,8 @@ module.exports = {
       url: 'https://polygon-mumbai.g.alchemy.com/v2/GxYJshazn6irvMi0_BX7LXp0sUw26Nr_',
       accounts: ['45afbc2a74a48ee03ab4f31d89503da93b14b3acb38f0f38ba7afd27a22df90e']
     }
+  },
+  etherscan: {
+    apiKey: 'FDF2MCVJIBAXZU492NY9PP1M1NIJ8ZG77K'    
   }
 };

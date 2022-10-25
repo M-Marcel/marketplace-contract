@@ -45,6 +45,19 @@ contract NftMarketplace is
 
     }
 
+    // Structure to define auction properties
+    struct Auction {
+        uint256 index; // Auction Index
+        address addressNFTCollection; // Address of the ERC721 NFT Collection contract
+        address addressPaymentToken; // Address of the ERC20 Payment Token contract
+        uint256 nftId; // NFT Id
+        address creator; // Creator of the Auction
+        address payable currentBidOwner; // Address of the highest bider
+        uint256 currentBidPrice; // Current highest bid for the auction
+        uint256 endAuction; // Timestamp for the end day&time of the auction
+        uint256 bidCount; // Number of bid placed on the auction
+    }
+
     ///Mapping a user's address to the tokens created
     mapping(address => UserToken[]) private addressToTokens;
     //Mapping of items to a Item struct
@@ -89,6 +102,33 @@ contract NftMarketplace is
         string  soldItemBaseURI
     );
 
+// Public event to notify that a new auction has been created
+    event NewAuction(
+        uint256 index,
+        address addressNFTCollection,
+        address addressPaymentToken,
+        uint256 nftId,
+        address mintedBy,
+        address currentBidOwner,
+        uint256 currentBidPrice,
+        uint256 endAuction,
+        uint256 bidCount
+    );
+
+    // Public event to notify that a new bid has been placed
+    event NewBidOnAuction(uint256 auctionIndex, uint256 newBid);
+
+    // Public event to notif that winner of an
+    // auction claim for his reward
+    event NFTClaimed(uint256 auctionIndex, uint256 nftId, address claimedBy);
+
+    // Public event to notify that the creator of
+    // an auction claimed for his money
+    event TokensClaimed(uint256 auctionIndex, uint256 nftId, address claimedBy);
+
+    // Public event to notify that an NFT has been refunded to the
+    // creator of an auction
+    event NFTRefunded(uint256 auctionIndex, uint256 nftId, address claimedBy);
 
     /// @notice Creates a new NFT for a user
     /// @param _owner The address of the user that owns this NFT

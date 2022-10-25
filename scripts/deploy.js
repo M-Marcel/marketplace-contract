@@ -6,6 +6,10 @@ async function main() {
   const cloudax = await upgrades.deployProxy(Cloudax,{kind:'uups'});
   await cloudax.deployed();
   console.log("Cloudax deployed to:", cloudax.address);
+
+  await hre.run("verify:verify", {
+    address: cloudax.address
+});
 }
 
 // We recommend this pattern to be able to use async/await everywhere
