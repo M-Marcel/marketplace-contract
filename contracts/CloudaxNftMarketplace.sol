@@ -87,22 +87,19 @@ contract CloudaxNftMarketplace is
     );
 
     constructor() ERC721("Cloudax", "CLDX") {
-         contractBaseURI = "";
-    }
-
-    /// @notice Returns contract URI of an NFT to be used on Opensea. e.g. https://cloudaxnftmarketplace.xyz/metadata/opensea-storefront
-    function contractURI() public view returns (string memory) {
-        // Concatenate the components, contractBaseURI to create contract URI for Opensea.
-        return contractBaseURI;
+        contractBaseURI = "";
     }
 
     // This function is used to update or set the CloudaxNFT Base for Opensea compatibiblity
-    function setContractBaseURI(string memory _contractBaseURI) public onlyOwner{
+    function setContractBaseURI(string memory _contractBaseURI)
+        public
+        onlyOwner
+    {
         contractBaseURI = _contractBaseURI;
     }
 
     // This function is used to update or set the CloudaxNFT Listing price
-    function setServiceFee(uint256 _serviceFee) public onlyOwner{
+    function setServiceFee(uint256 _serviceFee) public onlyOwner {
         serviceFee = _serviceFee;
     }
 
@@ -193,7 +190,7 @@ contract CloudaxNftMarketplace is
             abi.encodePacked(_tokenBaseURI, "/", Strings.toString(newTokenId))
         );
 
-         // Send funds to the funding recipient.
+        // Send funds to the funding recipient.
         _sendFunds(listedItems[_itemId].fundingRecipient, msg.value);
         depositedForItem[_itemId] += msg.value;
 
@@ -215,13 +212,15 @@ contract CloudaxNftMarketplace is
     /// @param _recipient The address to send funds to
     /// @param _amount The amount of funds to send
     function _sendFunds(address payable _recipient, uint256 _amount) private {
-
-        (bool success, ) = _recipient.call{value: _amount}('');
-        if(_amount <= 0){
+        (bool success, ) = _recipient.call{value: _amount}("");
+        if (_amount <= 0) {
             revert CannotSendZero({fundTosend: _amount});
         }
-        if(!success){
-            revert CannotSendFund({senderBalance: address(_recipient).balance, fundTosend: _amount});
+        if (!success) {
+            revert CannotSendFund({
+                senderBalance: address(_recipient).balance,
+                fundTosend: _amount
+            });
         }
     }
 
@@ -248,15 +247,24 @@ contract CloudaxNftMarketplace is
         return super.tokenURI(_tokenId);
     }
 
-    // function getPlatformName() public view virtual returns (string memory) {
-    //     return _platformName;
-    // }
-
     function _burn(uint256 _tokenId)
         internal
         override(ERC721, ERC721URIStorage)
         onlyOwner
     {
         super._burn(_tokenId);
+    }
+
+    // Getter Functions
+
+    /// @notice Returns contract URI of an NFT to be used on Opensea. e.g. https://cloudaxnftmarketplace.xyz/metadata/opensea-storefront
+    function getContractURI() public view returns (string memory) {
+        // Concatenate the components, contractBaseURI to create contract URI for Opensea.
+        return contractBaseURI;
+    }
+
+    /// @notice Returns the CloudaxNFT Listing price
+    function getServiceFee() public view returns (uint256) {
+        return serviceFee;
     }
 }
