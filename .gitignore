@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
@@ -23,14 +24,19 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+=======
+>>>>>>> 8f00efccf3542cb639061151ccec393c5b34a7eb
 node_modules
 .env
 coverage
 coverage.json
 typechain
+typechain-types
+dump
+.dump
 
 #Hardhat files
 cache
-#artifacts
-#hardhat.config.js
+artifacts
+deployments
 
