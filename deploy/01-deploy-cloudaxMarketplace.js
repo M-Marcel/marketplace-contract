@@ -18,12 +18,12 @@ module.exports = async function () {
 
     console.log("Deploying Cloudax...", cloudaxNftMarketplace.address)
 
-    if (process.env.ETHERSCAN_API_KEY) {
-        console.log("Verifying Cloudax Marketplace...")
-        await verify(cloudaxNftMarketplace.address)
-        // }
-        console.log("--------------------------------cloudaxNftMarketplace up")
-    }
+    // if (process.env.ETHERSCAN_API_KEY) {
+    //     console.log("Verifying Cloudax Marketplace...")
+    //     await verify(cloudaxNftMarketplace.address)
+    //     // }
+    //     console.log("--------------------------------cloudaxNftMarketplace up")
+    // }
 
     module.exports.tags = ["all", "cloudaxNftMarketplace"]
 }

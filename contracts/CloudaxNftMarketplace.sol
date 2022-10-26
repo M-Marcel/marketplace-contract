@@ -74,16 +74,21 @@ contract CloudaxNftMarketplace is
         address payable fundingRecipient,
         uint256 price,
         uint32 quantity,
-        uint32 royaltyBPS
+        uint32 royaltyBPS,
+        uint256 time
     );
 
     ///Emitted when a copy of an item is sold
     event itemCopySold(
         uint256 indexed soldItemCopyId,
-        uint256 soldItemId,
-        uint32 numSold,
+        uint256 indexed soldItemId,
+        uint32 indexed numSold,
         address buyer,
-        string soldItemBaseURI
+        address seller,
+        string soldItemBaseURI,
+        uint256 amountEarned,
+        uint256 totalAmountEarned,
+        uint256 time
     );
 
     constructor() ERC721("Cloudax", "CLDX") {
@@ -141,7 +146,8 @@ contract CloudaxNftMarketplace is
             _fundingRecipient,
             0,
             _quantity,
-            _royaltyBPS
+            _royaltyBPS,
+            block.timestamp
         );
     }
 
@@ -204,7 +210,11 @@ contract CloudaxNftMarketplace is
             _itemId,
             listedItems[_itemId].numSold,
             msg.sender,
-            _tokenBaseURI
+            listedItems[_itemId].fundingRecipient,
+            _tokenBaseURI,
+            msg.value,
+            price + msg.value,
+            block.timestamp
         );
     }
 
