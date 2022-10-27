@@ -143,7 +143,7 @@ contract CloudaxNftMarketplace is
 
         emit ItemCreated(
             newItemId,
-            _fundingRecipient,
+            _fundingRecipient, 
             0,
             _quantity,
             _royaltyBPS,
@@ -156,6 +156,7 @@ contract CloudaxNftMarketplace is
     function buyItemCopy(uint256 _itemId, string memory _tokenBaseURI)
         external
         payable
+        nonReentrant
     {
         // Caching variables locally to reduce reads
         uint256 price = listedItems[_itemId].price;
@@ -221,7 +222,7 @@ contract CloudaxNftMarketplace is
     /// @notice Sends funds to an address
     /// @param _recipient The address to send funds to
     /// @param _amount The amount of funds to send
-    function _sendFunds(address payable _recipient, uint256 _amount) private {
+    function _sendFunds(address payable _recipient, uint256 _amount) private nonReentrant{
         (bool success, ) = _recipient.call{value: _amount}("");
         if (_amount <= 0) {
             revert CannotSendZero({fundTosend: _amount});
