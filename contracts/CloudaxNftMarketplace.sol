@@ -156,6 +156,7 @@ contract CloudaxNftMarketplace is
     function buyItemCopy(uint256 _itemId, string memory _tokenBaseURI)
         external
         payable
+        nonReentrant
     {
         // Caching variables locally to reduce reads
         uint256 price = listedItems[_itemId].price;
