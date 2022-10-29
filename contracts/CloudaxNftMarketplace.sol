@@ -72,27 +72,28 @@ contract CloudaxNftMarketplace is
     event ItemCreated(
         uint256 indexed itemId,
         address payable fundingRecipient,
-        uint256 price,
+        uint256 numSold,
         uint32 quantity,
-        uint32 royaltyBPS,
-        uint256 time
+        uint32 royaltyBPS
     );
 
     ///Emitted when a copy of an item is sold
     event itemCopySold(
         uint256 indexed soldItemCopyId,
-        uint256 indexed soldItemId,
-        uint32 indexed numSold,
+        uint256 soldItemId,
+        uint32 numSold,
         address buyer,
-        address seller,
-        string soldItemBaseURI,
-        uint256 amountEarned,
-        uint256 totalAmountEarned,
-        uint256 time
+        string soldItemBaseURI
     );
 
     constructor() ERC721("Cloudax", "CLDX") {
         contractBaseURI = "";
+    }
+
+    /// @notice Returns contract URI of an NFT to be used on Opensea. e.g. https://cloudaxnftmarketplace.xyz/metadata/opensea-storefront
+    function contractURI() public view returns (string memory) {
+        // Concatenate the components, contractBaseURI to create contract URI for Opensea.
+        return contractBaseURI;
     }
 
     // This function is used to update or set the CloudaxNFT Base for Opensea compatibiblity
@@ -143,11 +144,10 @@ contract CloudaxNftMarketplace is
 
         emit ItemCreated(
             newItemId,
-            _fundingRecipient, 
+            _fundingRecipient,
             0,
             _quantity,
-            _royaltyBPS,
-            block.timestamp
+            _royaltyBPS
         );
     }
 
@@ -173,7 +173,7 @@ contract CloudaxNftMarketplace is
             revert InvalidItemId({itemId: _itemId});
         }
         // Check that there are still some copies or tokens of the item that are available for purchase.
-        if (quantity >= numSold) {
+        if (numSold >= quantity) {
             revert ItemSoldOut({quantity: quantity, numSold: numSold});
         }
         // Check that the buyer approved an amount that is equal or more than the price of the item set by the seller.
@@ -186,8 +186,8 @@ contract CloudaxNftMarketplace is
 
         // Increment the number of copies or tokens sold from this Item.
         listedItems[_itemId].numSold++;
-        listedItemId.increment();
-        uint256 newTokenId = listedItemId.current();
+        tokenId.increment();
+        uint256 newTokenId = tokenId.current();
 
         // https://cloudaxnftmarketplace.xyz/metadata/[USER_ID]/[ITEM_ID]/[TOKEN_ID]
         // Where _tokenBaseURI = https://cloudaxnftmarketplace.xyz/metadata/[USER_ID]/[ITEM_ID]
@@ -211,18 +211,14 @@ contract CloudaxNftMarketplace is
             _itemId,
             listedItems[_itemId].numSold,
             msg.sender,
-            listedItems[_itemId].fundingRecipient,
-            _tokenBaseURI,
-            msg.value,
-            price + msg.value,
-            block.timestamp
+            _tokenBaseURI
         );
     }
 
     /// @notice Sends funds to an address
     /// @param _recipient The address to send funds to
     /// @param _amount The amount of funds to send
-    function _sendFunds(address payable _recipient, uint256 _amount) private nonReentrant{
+    function _sendFunds(address payable _recipient, uint256 _amount) private {
         (bool success, ) = _recipient.call{value: _amount}("");
         if (_amount <= 0) {
             revert CannotSendZero({fundTosend: _amount});
@@ -258,24 +254,15 @@ contract CloudaxNftMarketplace is
         return super.tokenURI(_tokenId);
     }
 
+    // function getPlatformName() public view virtual returns (string memory) {
+    //     return _platformName;
+    // }
+
     function _burn(uint256 _tokenId)
         internal
         override(ERC721, ERC721URIStorage)
         onlyOwner
     {
         super._burn(_tokenId);
-    }
-
-    // Getter Functions
-
-    /// @notice Returns contract URI of an NFT to be used on Opensea. e.g. https://cloudaxnftmarketplace.xyz/metadata/opensea-storefront
-    function getContractURI() public view returns (string memory) {
-        // Concatenate the components, contractBaseURI to create contract URI for Opensea.
-        return contractBaseURI;
-    }
-
-    /// @notice Returns the CloudaxNFT Listing price
-    function getServiceFee() public view returns (uint256) {
-        return serviceFee;
     }
 }
