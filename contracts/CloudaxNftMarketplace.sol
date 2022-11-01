@@ -216,11 +216,11 @@ contract CloudaxNftMarketplace is
     /// @param _recipient The address to send funds to
     /// @param _amount The amount of funds to send
     function _sendFunds(address payable _recipient, uint256 _amount) private {
-
-        (bool success, ) = _recipient.call{value: _amount}('');
         if(_amount <= 0){
             revert CannotSendZero({fundTosend: _amount});
         }
+        
+        (bool success, ) = _recipient.call{value: _amount}('');
         if(!success){
             revert CannotSendFund({senderBalance: address(_recipient).balance, fundTosend: _amount});
         }
