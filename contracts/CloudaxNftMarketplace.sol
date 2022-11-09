@@ -7,9 +7,12 @@ import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 ////Custom Errors
 error InvalidAddress();
+error NoProceeds();
+error TransferFailed();
 error QuantityRequired(uint256 quantity, uint256 minRequired);
 error QuantityDoesNotExist(uint256 availableQuantity);
 error InvalidItemId(uint256 itemId);
@@ -24,9 +27,22 @@ contract CloudaxNftMarketplace is
     ERC721URIStorage,
     Ownable
 {
+    using SafeMath for uint256;
     using Counters for Counters.Counter;
-    Counters.Counter private tokenId;
-    Counters.Counter private listedItemId;
+    // Counters.Counter private _tokenId;
+    Counters.Counter private _listedItemId;
+    Counters.Counter private _totalItem;
+    Counters.Counter private _itemsSold;
+    // Counters.Counter private _itemsSoldcontractBaseURI;
+    // string public baseTokenURI;
+    string private _contractBaseURI;
+    // % times 200 = 2%
+    uint256 private _serviceFee = 200;
+    uint256 private _platformEarning;
+    uint256 private _totalAmount;
+
+    // Added an additional counter, since _tokenIds can be reduced by burning.
+    // And intranal because the marketplace contract will display the total amount.
 
     // structs for an item to be listed
     struct ListedItem {
@@ -58,11 +74,10 @@ contract CloudaxNftMarketplace is
     // The amount of funds that have been earned from selling the copies of a given item.
     mapping(uint256 => uint256) public depositedForItem;
     // Total amount earned by Seller... mapping of address -> Amount earned
-    mapping(address => uint256) private s_proceeds;
+    mapping(address => uint256) private indivivdualEarningInPlatform;
+    //Mapping of Item to a TokenStatus struct
+    mapping(uint256 => TokenStatus) private _idToItemStatus;
     // mapping(uint256 => uint256) public depositedForEdition;
-    string public baseTokenURI;
-    string private contractBaseURI;
-    uint256 private serviceFee;
 
     // ================================
     // EVENTS
@@ -71,7 +86,7 @@ contract CloudaxNftMarketplace is
     ///Emitted when a Item is created
     event ItemCreated(
         uint256 indexed itemId,
-        address payable fundingRecipient,
+        address indexed fundingRecipient,
         uint256 price,
         uint32 quantity,
         uint32 royaltyBPS,
@@ -79,11 +94,22 @@ contract CloudaxNftMarketplace is
     );
 
     ///Emitted when a copy of an item is sold
-    event itemCopySold(
+    event ItemCopySold(
         uint256 indexed soldItemCopyId,
         uint256 indexed soldItemId,
-        uint32 indexed numSold,
-        address buyer,
+        uint32 numSold,
+        address indexed buyer,
+        address seller,
+        string soldItemBaseURI,
+        uint256 amountEarned,
+        uint256 time
+    );
+
+    ///Emitted when a copy of an item is sold
+    event NftItemSold(
+        uint256 indexed soldItemCopyId,
+        uint256 indexed soldItemId,
+        address indexed buyer,
         address seller,
         string soldItemBaseURI,
         uint256 amountEarned,
@@ -91,21 +117,33 @@ contract CloudaxNftMarketplace is
         uint256 time
     );
 
+    event ServiceFeeUpgraded(uint256 oldFee, uint256 newFee, uint256 time);
+
+    enum TokenStatus {
+        DEFAULT,
+        ACTIVE,
+        ONSELL,
+        ONAUCTION,
+        BURNED
+    }
+
     constructor() ERC721("Cloudax", "CLDX") {
-        contractBaseURI = "";
+        _contractBaseURI = "";
     }
 
     // This function is used to update or set the CloudaxNFT Base for Opensea compatibiblity
-    function setContractBaseURI(string memory _contractBaseURI)
+    function setContractBaseURI(string memory __contractBaseURI)
         public
         onlyOwner
     {
-        contractBaseURI = _contractBaseURI;
+        _contractBaseURI = __contractBaseURI;
     }
 
     // This function is used to update or set the CloudaxNFT Listing price
-    function setServiceFee(uint256 _serviceFee) public onlyOwner {
-        serviceFee = _serviceFee;
+    function setServiceFee(uint256 __serviceFee) public onlyOwner {
+        uint256 oldFee = _serviceFee;
+        _serviceFee = __serviceFee;
+        emit ServiceFeeUpgraded(oldFee, _serviceFee, block.timestamp);
     }
 
     /// @notice Creates a new NFT item.
@@ -113,12 +151,12 @@ contract CloudaxNftMarketplace is
     /// @param _price The price at which each copy of NFT item or token from a NFT item will be sold, in ETH.
     /// @param _quantity The maximum number of NFT item's copy or tokens that can be sold.
     /// @param _royaltyBPS The royalty amount in bps per copy of a NFT item.
-    function createItem(
+    function _createItem(
         address payable _fundingRecipient,
         uint256 _price,
         uint32 _quantity,
         uint32 _royaltyBPS //// onlyOwner
-    ) external {
+    ) private {
         // Validations
         if (_fundingRecipient == address(0)) {
             revert InvalidAddress();
@@ -130,8 +168,9 @@ contract CloudaxNftMarketplace is
             revert QuantityRequired({quantity: _quantity, minRequired: 1});
         }
 
-        listedItemId.increment();
-        uint256 newItemId = listedItemId.current();
+        _listedItemId.increment();
+        _totalItem.increment();
+        uint256 newItemId = _listedItemId.current();
         listedItems[newItemId] = ListedItem({
             itemId: newItemId,
             fundingRecipient: _fundingRecipient,
@@ -140,6 +179,8 @@ contract CloudaxNftMarketplace is
             quantity: _quantity,
             royaltyBPS: _royaltyBPS
         });
+
+        _idToItemStatus[newItemId] = TokenStatus.ONSELL;
 
         emit ItemCreated(
             newItemId,
@@ -153,11 +194,15 @@ contract CloudaxNftMarketplace is
 
     /// @notice Creates or mints a new copy or token for the given item, and assigns it to the buyer
     /// @param _itemId The id of the item selected to be purchased
-    function buyItemCopy(uint256 _itemId, string memory _tokenBaseURI)
-        external
-        payable
-        nonReentrant
-    {
+    function buyItemCopy(
+        address payable _fundingRecipient,
+        uint256 _price,
+        uint32 _quantity,
+        uint32 _royaltyBPS,
+        uint256 _itemId,
+        string memory _tokenBaseURI
+    ) external payable nonReentrant {
+        _createItem(_fundingRecipient, _price, _quantity, _royaltyBPS);
         // Caching variables locally to reduce reads
         uint256 price = listedItems[_itemId].price;
         uint32 quantity = listedItems[_itemId].quantity;
@@ -180,14 +225,12 @@ contract CloudaxNftMarketplace is
         if (price > msg.value) {
             revert InsufficientFund({price: price, allowedFund: msg.value});
         }
-        // Update the deposited total for the item.
-        // Adding the newly earned money to the total amount a user has earned from an Item.
-        depositedForItem[_itemId] += msg.value;
 
         // Increment the number of copies or tokens sold from this Item.
         listedItems[_itemId].numSold++;
-        listedItemId.increment();
-        uint256 newTokenId = listedItemId.current();
+        _listedItemId.increment();
+        _totalItem.increment();
+        uint256 newTokenId = _listedItemId.current();
 
         // https://cloudaxnftmarketplace.xyz/metadata/[USER_ID]/[ITEM_ID]/[TOKEN_ID]
         // Where _tokenBaseURI = https://cloudaxnftmarketplace.xyz/metadata/[USER_ID]/[ITEM_ID]
@@ -197,39 +240,152 @@ contract CloudaxNftMarketplace is
             abi.encodePacked(_tokenBaseURI, "/", Strings.toString(newTokenId))
         );
 
+        //Deduct the service fee
+        uint256 serviceFee = msg.value.mul(_serviceFee).div(10000);
+        // uint256 royalty = msg.value.mul(_royaltyBPS).div(100);
+        // uint256 finalAmount = msg.value.sub(serviceFee + royalty);
+        uint256 finalAmount = msg.value.sub(serviceFee);
+
+        // Update the deposited total for the item.
+        // Adding the newly earned money to the total amount a user has earned from an Item.
+        depositedForItem[_itemId] += finalAmount;
+        indivivdualEarningInPlatform[msg.sender] += finalAmount;
+        _platformEarning += serviceFee;
+        _totalAmount += msg.value;
+
         // Send funds to the funding recipient.
-        _sendFunds(listedItems[_itemId].fundingRecipient, msg.value);
-        depositedForItem[_itemId] += msg.value;
+        _sendFunds(listedItems[_itemId].fundingRecipient, finalAmount);
 
         // Mint a new copy or token from the Item for the buyer, using the `newTokenId`.
         safeMint(msg.sender, newTokenId, _tokenBaseURI);
         // Store the mapping of the ID a sold item's copy or token id to the Item being purchased.
         tokenToListedItem[newTokenId] = _itemId;
 
-        emit itemCopySold(
+        _idToItemStatus[newTokenId] = TokenStatus.ACTIVE;
+        _itemsSold.increment();
+
+        emit ItemCopySold(
             newTokenId,
             _itemId,
             listedItems[_itemId].numSold,
             msg.sender,
             listedItems[_itemId].fundingRecipient,
             _tokenBaseURI,
-            msg.value,
-            price + msg.value,
+            finalAmount,
             block.timestamp
         );
+    }
+
+    function listedToken(uint256 tokenId, uint256 price) public {}
+
+    /// @notice Creates or mints a new copy or token for the given item, and assigns it to the buyer
+    /// @param _itemId The id of the item selected to be purchased
+    function buyNftItem(
+        address payable _fundingRecipient,
+        uint256 _price,
+        uint32 _royaltyBPS,
+        uint256 _itemId,
+        string memory _tokenBaseURI
+    ) external payable nonReentrant {
+        _createItem(_fundingRecipient, _price, _quantity, _royaltyBPS);
+        // Caching variables locally to reduce reads
+        uint256 price = listedItems[_itemId].price;
+        uint32 quantity = listedItems[_itemId].quantity;
+        uint32 numSold = listedItems[_itemId].numSold;
+
+        // Validations
+        // Check that the item's quantity is more than zero(0).
+        if (quantity <= 0) {
+            revert QuantityDoesNotExist({availableQuantity: quantity});
+        }
+        // Check that the item's ID is not Zero(0).
+        if (_itemId <= 0) {
+            revert InvalidItemId({itemId: _itemId});
+        }
+        // Check that there are still some copies or tokens of the item that are available for purchase.
+        if (quantity >= numSold) {
+            revert ItemSoldOut({quantity: quantity, numSold: numSold});
+        }
+        // Check that the buyer approved an amount that is equal or more than the price of the item set by the seller.
+        if (price > msg.value) {
+            revert InsufficientFund({price: price, allowedFund: msg.value});
+        }
+
+        // Increment the number of copies or tokens sold from this Item.
+        listedItems[_itemId].numSold++;
+        _listedItemId.increment();
+        _totalItem.increment();
+        uint256 newTokenId = _listedItemId.current();
+
+        // https://cloudaxnftmarketplace.xyz/metadata/[USER_ID]/[ITEM_ID]/[TOKEN_ID]
+        // Where _tokenBaseURI = https://cloudaxnftmarketplace.xyz/metadata/[USER_ID]/[ITEM_ID]
+        // Generating a metadata URL for the new copy of the ITEM or Token that was generated.
+
+        _tokenBaseURI = string(
+            abi.encodePacked(_tokenBaseURI, "/", Strings.toString(newTokenId))
+        );
+
+        //Deduct the service fee
+        uint256 serviceFee = msg.value.mul(_serviceFee).div(10000);
+        // uint256 royalty = msg.value.mul(_royaltyBPS).div(100);
+        // uint256 finalAmount = msg.value.sub(serviceFee + royalty);
+        uint256 finalAmount = msg.value.sub(serviceFee);
+
+        // Update the deposited total for the item.
+        // Adding the newly earned money to the total amount a user has earned from an Item.
+        depositedForItem[_itemId] += finalAmount;
+        indivivdualEarningInPlatform[msg.sender] += finalAmount;
+        _platformEarning += serviceFee;
+        _totalAmount += msg.value;
+
+        // Send funds to the funding recipient.
+        _sendFunds(listedItems[_itemId].fundingRecipient, finalAmount);
+
+        // Mint a new copy or token from the Item for the buyer, using the `newTokenId`.
+        safeMint(msg.sender, newTokenId, _tokenBaseURI);
+        // Store the mapping of the ID a sold item's copy or token id to the Item being purchased.
+        tokenToListedItem[newTokenId] = _itemId;
+
+        _idToItemStatus[newTokenId] = TokenStatus.ACTIVE;
+        _itemsSold.increment();
+
+        emit ItemCopySold(
+            newTokenId,
+            _itemId,
+            listedItems[_itemId].numSold,
+            msg.sender,
+            listedItems[_itemId].fundingRecipient,
+            _tokenBaseURI,
+            finalAmount,
+            block.timestamp
+        );
+
+        // emit nftItemSold(
+        //     newTokenId,
+        //     _itemId,
+        //     msg.sender,
+        //     listedItems[_itemId].fundingRecipient,
+        //     _tokenBaseURI,
+        //     msg.value,
+        //     price + msg.value,
+        //     block.timestamp
+        // );
     }
 
     /// @notice Sends funds to an address
     /// @param _recipient The address to send funds to
     /// @param _amount The amount of funds to send
     function _sendFunds(address payable _recipient, uint256 _amount) private {
-        if(_amount <= 0){
+        if (_amount <= 0) {
             revert CannotSendZero({fundTosend: _amount});
         }
-        
-        (bool success, ) = _recipient.call{value: _amount}('');
-        if(!success){
-            revert CannotSendFund({senderBalance: address(_recipient).balance, fundTosend: _amount});
+
+        (bool success, ) = _recipient.call{value: _amount}("");
+        if (!success) {
+            revert CannotSendFund({
+                senderBalance: address(_recipient).balance,
+                fundTosend: _amount
+            });
         }
     }
 
@@ -262,18 +418,49 @@ contract CloudaxNftMarketplace is
         onlyOwner
     {
         super._burn(_tokenId);
+        _totalItem.decrement();
+        _idToItemStatus[_tokenId] = TokenStatus.BURNED;
+    }
+
+    function withdrawEarnings() external onlyOwner {
+        if (_platformEarning <= 0) {
+            revert NoProceeds();
+        }
+        _platformEarning = 0;
+        (bool success, ) = payable(msg.sender).call{value: _platformEarning}(
+            ""
+        );
+        if (!success) {
+            revert TransferFailed();
+        }
     }
 
     // Getter Functions
 
     /// @notice Returns contract URI of an NFT to be used on Opensea. e.g. https://cloudaxnftmarketplace.xyz/metadata/opensea-storefront
     function getContractURI() public view returns (string memory) {
-        // Concatenate the components, contractBaseURI to create contract URI for Opensea.
-        return contractBaseURI;
+        // Concatenate the components, _contractBaseURI to create contract URI for Opensea.
+        return _contractBaseURI;
     }
 
     /// @notice Returns the CloudaxNFT Listing price
     function getServiceFee() public view returns (uint256) {
-        return serviceFee;
+        return _serviceFee;
+    }
+
+    function getTotalAmount() public view returns (uint256) {
+        return _totalItem.current();
+    }
+
+    function getTokenStatus(uint256 tokenId)
+        external
+        view
+        returns (TokenStatus)
+    {
+        return _idToItemStatus[tokenId];
+    }
+
+    function getItemsSold() public view returns (uint256) {
+        return _itemsSold.current();
     }
 }
