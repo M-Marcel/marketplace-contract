@@ -160,7 +160,7 @@ contract CloudaxNftMarketplace is
     }
 
     constructor() ERC721("Cloudax", "CLDX") {
-        _contractBaseURI = "";
+        // _contractBaseURI = "";
     }
 
     modifier isOwner(uint256 tokenId, address spender) {
@@ -235,7 +235,7 @@ contract CloudaxNftMarketplace is
         emit ItemCreated(
             newItemId,
             _fundingRecipient,
-            0,
+            _price,
             _quantity,
             _royaltyBPS,
             block.timestamp
@@ -252,8 +252,17 @@ contract CloudaxNftMarketplace is
         uint256 _itemId,
         string memory _tokenBaseURI
     ) external payable nonReentrant {
-        _createItem(_itemId, _fundingRecipient, _price, _quantity, _royaltyBPS);
-        // get itId from the emitted event of the above "_createItem" methed
+        if (listedItems[_itemId].itemId == _itemId) {
+            _idToItemStatus[_itemId] == TokenStatus.ONSELL;
+        } else {
+            _createItem(
+                _itemId,
+                _fundingRecipient,
+                _price,
+                _quantity,
+                _royaltyBPS
+            );
+        }
 
         // Caching variables locally to reduce reads
         uint256 price = listedItems[_itemId].price;
@@ -270,7 +279,7 @@ contract CloudaxNftMarketplace is
             revert InvalidItemId({itemId: _itemId});
         }
         // Check that there are still some copies or tokens of the item that are available for purchase.
-        if (quantity >= numSold) {
+        if (quantity <= numSold) {
             revert ItemSoldOut({quantity: quantity, numSold: numSold});
         }
         // Check that the buyer approved an amount that is equal or more than the price of the item set by the seller.
@@ -463,7 +472,8 @@ contract CloudaxNftMarketplace is
             0,
             msg.sender,
             listedItems[tokenId].fundingRecipient,
-            soldItems[tokenId].tokenBaseURI,
+            _tokenBaseURI,
+            // soldItems[tokenId].tokenBaseURI,
             finalAmount,
             block.timestamp
         );

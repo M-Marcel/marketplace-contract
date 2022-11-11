@@ -45,6 +45,7 @@ module.exports = {
       blockConfirmations: 1,
       gas: 210000000,
       gasPrice: 800000000000,
+      blockGasLimit: 30902728800,
       // gas: ethers.utils.parseEther("1"),
       // gasLimit: ethers.utils.parseEther("1"),
       // gasPrice: ethers.utils.parseEther("1"),
@@ -54,6 +55,7 @@ module.exports = {
       blockConfirmations: 1,
       gas: 210000000,
       gasPrice: 800000000000,
+      lockGasLimit: 30902728800,
       // gas: ethers.utils.parseEther("1"),
       // gasLimit: ethers.utils.parseEther("1"),
       // gasPrice: ethers.utils.parseEther("1"),
@@ -151,6 +153,7 @@ module.exports = {
           optimizer: {
             enabled: true,
             runs: 2000,
+            // viaIR: true,
             details: {
               yul: true,
               yulDetails: {
