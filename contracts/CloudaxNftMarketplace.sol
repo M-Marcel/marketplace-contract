@@ -31,19 +31,18 @@ contract CloudaxNftMarketplace is
 {
     using SafeMath for uint256;
     using Counters for Counters.Counter;
-    // Counters.Counter private _tokenId;
-    Counters.Counter private _listedItemId;
+    Counters.Counter private _listedTokenId;
     Counters.Counter private _totalItem;
     Counters.Counter private _totalToken;
     Counters.Counter private _itemsSold;
-    // Counters.Counter private _itemsSoldcontractBaseURI;
-    // string public baseTokenURI;
+    Counters.Counter private _itemID;
     string private _contractBaseURI;
+
     // % times 200 = 2%
     uint256 private _serviceFee = 200;
     uint256 private _platformEarning;
     uint256 private _totalAmount;
-
+    // uint256 public _itemID;
     // Added an additional counter, since _tokenIds can be reduced by burning.
     // And intranal because the marketplace contract will display the total amount.
 
@@ -92,6 +91,12 @@ contract CloudaxNftMarketplace is
     // The amount of funds that have been earned from selling the copies of a given item.
     mapping(uint256 => uint256) public depositedForItem;
 
+    // mapping of smart-contract itemId (uint) to webapp itemId(db objectId)
+    mapping(uint256 => string) public itemIdToItemId;
+
+    // webapp itemId(db objectId) to mapping of smart-contract itemId (uint)
+    mapping(string => uint256) public itemIdDBToItemId;
+
     // Total amount earned by Seller... mapping of address -> Amount earned
     mapping(address => uint256) private indivivdualEarningInPlatform;
 
@@ -107,6 +112,7 @@ contract CloudaxNftMarketplace is
     ///Emitted when a Item is created
     event ItemCreated(
         uint256 indexed itemId,
+        string indexed itemIdDB,
         address indexed fundingRecipient,
         uint256 price,
         uint32 quantity,
@@ -126,7 +132,7 @@ contract CloudaxNftMarketplace is
     ///Emitted when a copy of an item is sold
     event ItemCopySold(
         uint256 indexed soldItemCopyId,
-        uint256 indexed soldItemId,
+        string indexed soldItemIdDB,
         uint32 numSold,
         address indexed buyer,
         address seller,
@@ -147,6 +153,8 @@ contract CloudaxNftMarketplace is
         uint256 time
     );
 
+    event itemIdPaired(string indexed itemIdDB, uint256 indexed itemId);
+
     event ServiceFeeUpgraded(uint256 oldFee, uint256 newFee, uint256 time);
 
     event ItemListingCanceled(address owner, uint256 tokenId, uint256 time);
@@ -155,11 +163,12 @@ contract CloudaxNftMarketplace is
         DEFAULT,
         ACTIVE,
         ONSELL,
+        SOLDOUT,
         ONAUCTION,
         BURNED
     }
 
-    constructor() ERC721("Cloudax", "CLDX") {
+    constructor() ERC721("Cloudax Marketplace", "CLDX") {
         // _contractBaseURI = "";
     }
 
@@ -200,7 +209,7 @@ contract CloudaxNftMarketplace is
     /// @param _quantity The maximum number of NFT item's copy or tokens that can be sold.
     /// @param _royaltyBPS The royalty amount in bps per copy of a NFT item.
     function _createItem(
-        uint256 _itemId,
+        string memory itemId,
         address payable _fundingRecipient,
         uint256 _price,
         uint32 _quantity,
@@ -216,10 +225,14 @@ contract CloudaxNftMarketplace is
             revert QuantityRequired({quantity: _quantity, minRequired: 1});
         }
 
-        // _listedItemId.increment();
-        // uint256 newItemId = _listedItemId.current();
+        _itemID.increment();
+        uint256 newItemId = _itemID.current();
+        itemIdToItemId[newItemId] = itemId;
+        itemIdDBToItemId[itemId] = newItemId;
+        emit itemIdPaired(itemId, newItemId);
+
+        // _listedTokenId.increment();
         _totalItem.increment();
-        uint256 newItemId = _itemId;
         listedItems[newItemId] = ListedItem({
             itemId: newItemId,
             tokenId: 0,
@@ -234,6 +247,7 @@ contract CloudaxNftMarketplace is
 
         emit ItemCreated(
             newItemId,
+            itemId,
             _fundingRecipient,
             _price,
             _quantity,
@@ -243,31 +257,44 @@ contract CloudaxNftMarketplace is
     }
 
     /// @notice Creates or mints a new copy or token for the given item, and assigns it to the buyer
-    /// @param _itemId The id of the item selected to be purchased
+    /// @param itemId The id of the item selected to be purchased
     function buyItemCopy(
         address payable _fundingRecipient,
         uint256 _price,
         uint32 _quantity,
         uint32 _royaltyBPS,
-        uint256 _itemId,
+        string memory itemId,
         string memory _tokenBaseURI
     ) external payable nonReentrant {
-        if (listedItems[_itemId].itemId == _itemId) {
-            _idToItemStatus[_itemId] == TokenStatus.ONSELL;
-        } else {
+        uint256 id = itemIdDBToItemId[itemId];
+        if (listedItems[_itemID.current()].itemId != id) {
             _createItem(
-                _itemId,
+                itemId,
                 _fundingRecipient,
                 _price,
                 _quantity,
                 _royaltyBPS
             );
         }
-
-        // Caching variables locally to reduce reads
+        uint256 _itemId = _itemID.current();
         uint256 price = listedItems[_itemId].price;
         uint32 quantity = listedItems[_itemId].quantity;
-        uint32 numSold = listedItems[_itemId].numSold;
+        if (quantity <= 0 && _itemId <= 0) {
+            _createItem(
+                itemId,
+                _fundingRecipient,
+                _price,
+                _quantity,
+                _royaltyBPS
+            );
+        }
+        _itemId = _itemID.current();
+
+        // 000000000000000000
+        // Caching variables locally to reduce reads
+        price = listedItems[_itemId].price;
+        quantity = listedItems[_itemId].quantity;
+        uint256 numSold = listedItems[_itemId].numSold;
 
         // Validations
         // Check that the item's quantity is more than zero(0).
@@ -280,6 +307,7 @@ contract CloudaxNftMarketplace is
         }
         // Check that there are still some copies or tokens of the item that are available for purchase.
         if (quantity <= numSold) {
+            _idToItemStatus[_itemId] = TokenStatus.SOLDOUT;
             revert ItemSoldOut({quantity: quantity, numSold: numSold});
         }
         // Check that the buyer approved an amount that is equal or more than the price of the item set by the seller.
@@ -289,9 +317,9 @@ contract CloudaxNftMarketplace is
 
         // Increment the number of copies or tokens sold from this Item.
         listedItems[_itemId].numSold++;
-        _listedItemId.increment();
+        _listedTokenId.increment();
         _totalItem.increment();
-        uint256 newTokenId = _listedItemId.current();
+        uint256 newTokenId = _listedTokenId.current();
 
         // https://cloudaxnftmarketplace.xyz/metadata/[USER_ID]/[ITEM_ID]/[TOKEN_ID]
         // Where _tokenBaseURI = https://cloudaxnftmarketplace.xyz/metadata/[USER_ID]/[ITEM_ID]
@@ -338,7 +366,7 @@ contract CloudaxNftMarketplace is
 
         emit ItemCopySold(
             newTokenId,
-            _itemId,
+            itemId,
             listedItems[_itemId].numSold,
             msg.sender,
             listedItems[_itemId].fundingRecipient,
@@ -346,6 +374,7 @@ contract CloudaxNftMarketplace is
             finalAmount,
             block.timestamp
         );
+        emit itemIdPaired(itemId, _itemId);
     }
 
     function listToken(
@@ -408,7 +437,6 @@ contract CloudaxNftMarketplace is
     function buyNft(uint256 tokenId, string memory _tokenBaseURI)
         external
         payable
-        nonReentrant
         isListed(tokenId)
     {
         // Caching variables locally to reduce reads
@@ -441,6 +469,7 @@ contract CloudaxNftMarketplace is
         _platformEarning += serviceFee;
         _totalAmount += msg.value;
 
+        address creator = listedItems[tokenId].fundingRecipient;
         // Send funds to the funding recipient.
         _sendFunds(listedItems[tokenId].fundingRecipient, finalAmount);
 
@@ -448,14 +477,12 @@ contract CloudaxNftMarketplace is
         _sendFunds(soldItems[tokenId].creator, royalty);
 
         // transfer nft to buyer
-        safeTransferFrom(
-            listedItems[tokenId].fundingRecipient,
-            msg.sender,
-            tokenId
-        );
+        safeTransferFrom(creator, msg.sender, tokenId);
 
         _idToItemStatus[tokenId] = TokenStatus.ACTIVE;
         _itemsSold.increment();
+
+        string memory itemIdDB = itemIdToItemId[itemId];
 
         soldItems[tokenId] = SoldItem({
             tokenId: tokenId,
@@ -468,12 +495,11 @@ contract CloudaxNftMarketplace is
 
         emit ItemCopySold(
             tokenId,
-            itemId,
+            itemIdDB,
             0,
             msg.sender,
-            listedItems[tokenId].fundingRecipient,
+            creator,
             _tokenBaseURI,
-            // soldItems[tokenId].tokenBaseURI,
             finalAmount,
             block.timestamp
         );
@@ -533,13 +559,14 @@ contract CloudaxNftMarketplace is
         if (_platformEarning <= 0) {
             revert NoProceeds();
         }
-        _platformEarning = 0;
+
         (bool success, ) = payable(msg.sender).call{value: _platformEarning}(
             ""
         );
         if (!success) {
             revert TransferFailed();
         }
+        _platformEarning = 0;
     }
 
     // Getter Functions
@@ -569,5 +596,14 @@ contract CloudaxNftMarketplace is
 
     function getItemsSold() public view returns (uint256) {
         return _itemsSold.current();
+    }
+
+    function getItemId(uint256 itemId) public view returns (string memory) {
+        string memory _itemId = itemIdToItemId[itemId];
+        return _itemId;
+    }
+
+    function getItemIdDB(string memory itemId) public view returns (uint256) {
+        return itemIdDBToItemId[itemId];
     }
 }

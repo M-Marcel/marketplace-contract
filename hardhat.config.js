@@ -80,6 +80,9 @@ module.exports = {
       saveDeployments: true,
       chainId: 5,
       blockConfirmations: 6,
+      gas: 210000000,
+      gasPrice: 800000000000,
+      blockGasLimit: 30902728800,
     },
     binanceSCMainnet: {
       url: BINANCE_SMARTCHAIN_MAINNET_RPC_URL,
