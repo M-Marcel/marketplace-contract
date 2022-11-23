@@ -172,15 +172,16 @@ contract CloudaxNftMarketplace is
         // _contractBaseURI = "";
     }
 
-    modifier isOwner(uint256 tokenId, address spender) {
-        address owner = ERC721.ownerOf(tokenId);
+    modifier isOwner(address nftAddress, uint256 tokenId, address spender) {
+        ERC721 nft = ERC721(nftAddress);
+        address owner = nft.ownerOf(tokenId);
         if (spender != owner) {
             revert NotOwner();
         }
         _;
     }
 
-    modifier isListed(uint256 tokenId) {
+    modifier isListed(address nftAddress, uint256 tokenId) {
         ListedItem memory listing = listedItems[tokenId];
         if (listing.price <= 0) {
             revert NotListed(tokenId);
@@ -331,9 +332,8 @@ contract CloudaxNftMarketplace is
 
         //Deduct the service fee
         uint256 serviceFee = msg.value.mul(_serviceFee).div(10000);
-        // uint256 royalty = msg.value.mul(_royaltyBPS).div(100);
-        // uint256 finalAmount = msg.value.sub(serviceFee + royalty);
-        uint256 finalAmount = msg.value.sub(serviceFee);
+        uint256 royalty = msg.value.mul(_royaltyBPS).div(100);
+        uint256 finalAmount = msg.value.sub(serviceFee + royalty);
 
         // Update the deposited total for the item.
         // Adding the newly earned money to the total amount a user has earned from an Item.
@@ -378,54 +378,36 @@ contract CloudaxNftMarketplace is
     }
 
     function listToken(
+        address nftAddress
         uint256 tokenId,
-        uint256 price,
         address payable fundingRecipant
-    ) public isOwner(tokenId, msg.sender) {
+    ) public isOwner(nftAddress, tokenId, msg.sender) {
         uint256 itemId = tokenToListedItem[tokenId];
         require(
             fundingRecipant == msg.sender,
             "Only the nft owner can receive"
         );
-        approve(address(this), tokenId);
+        ERC721 nft = ERC721(nftAddress);
+        nft.approve(address(this), tokenId);
         listedItems[tokenId] = ListedItem({
-            itemId: itemId,
+            itemId: 0,
             tokenId: tokenId,
             fundingRecipient: fundingRecipant,
-            price: price,
+            price: 0,
             numSold: 0,
             quantity: 0,
-            royaltyBPS: listedItems[itemId].royaltyBPS
+            royaltyBPS: 0
         });
 
         _idToItemStatus[tokenId] = TokenStatus.ONSELL;
 
-        emit TokenListed(tokenId, itemId, msg.sender, price, block.timestamp);
+        emit TokenListed(tokenId, 0, msg.sender, 0, block.timestamp);
     }
 
-    function updateListing(uint256 tokenId, uint256 newPrice)
+    function cancelListing(address nftAddress, uint256 tokenId)
         external
-        isListed(tokenId)
-        isOwner(tokenId, msg.sender)
-    {
-        require(
-            listedItems[tokenId].price > newPrice,
-            "New price should not be greater previous price"
-        );
-        listedItems[tokenId].price = newPrice;
-        emit TokenListed(
-            tokenId,
-            listedItems[tokenId].itemId,
-            msg.sender,
-            newPrice,
-            block.timestamp
-        );
-    }
-
-    function cancelListing(uint256 tokenId)
-        external
-        isOwner(tokenId, msg.sender)
-        isListed(tokenId)
+        isOwner(nftAddress, tokenId, msg.sender)
+        isListed(nftAddress, tokenId)
     {
         delete (listedItems[tokenId]);
         emit ItemListingCanceled(msg.sender, tokenId, block.timestamp);
@@ -434,31 +416,20 @@ contract CloudaxNftMarketplace is
 
     /// @notice Creates or mints a new copy or token for the given item, and assigns it to the buyer
     /// @param tokenId The id of the token selected to be purchased
-    function buyNft(uint256 tokenId, string memory _tokenBaseURI)
+    function buyNft(address nftAddress, uint256 tokenId)
         external
         payable
-        isListed(tokenId)
+        isListed(nftAddress, tokenId)
     {
         // Caching variables locally to reduce reads
         uint256 price = listedItems[tokenId].price;
         uint256 itemId = listedItems[tokenId].itemId;
 
-        // Validations
-        // Check that the item's ID is not Zero(0).
-        if (itemId <= 0) {
-            revert InvalidItemId({itemId: itemId});
-        }
-        // Check that the buyer approved an amount that is equal or more than the price of the item set by the seller.
-        if (price >= msg.value) {
-            revert InsufficientFund({price: price, allowedFund: msg.value});
-        }
 
         //Deduct the fees
         uint256 serviceFee = msg.value.mul(_serviceFee).div(10000);
-        uint256 royalty = msg.value.mul(listedItems[tokenId].royaltyBPS).div(
-            100
-        );
-        uint256 finalAmount = msg.value.sub(serviceFee + royalty);
+       
+        uint256 finalAmount = msg.value.sub(serviceFee);
 
         // Update the deposited total for the item.
         // Adding the newly earned money to the total amount a user has earned from an Item.
@@ -473,33 +444,29 @@ contract CloudaxNftMarketplace is
         // Send funds to the funding recipient.
         _sendFunds(listedItems[tokenId].fundingRecipient, finalAmount);
 
-        // Send funds to the royalty to creator.
-        _sendFunds(soldItems[tokenId].creator, royalty);
-
         // transfer nft to buyer
         safeTransferFrom(creator, msg.sender, tokenId);
 
         _idToItemStatus[tokenId] = TokenStatus.ACTIVE;
         _itemsSold.increment();
 
-        string memory itemIdDB = itemIdToItemId[itemId];
 
-        soldItems[tokenId] = SoldItem({
+         soldItems[tokenId] = SoldItem({
             tokenId: tokenId,
-            itemId: itemId,
+            itemId: 0,
             buyer: payable(msg.sender),
-            creator: soldItems[tokenId].creator,
-            tokenBaseURI: soldItems[tokenId].tokenBaseURI,
+            creator: listedItems[_itemId].fundingRecipient,
+            tokenBaseURI: _tokenBaseURI,
             amountEarned: finalAmount
         });
 
         emit ItemCopySold(
             tokenId,
-            itemIdDB,
+            0,
             0,
             msg.sender,
-            creator,
-            _tokenBaseURI,
+            listedItems[_itemId].fundingRecipient,
+            "",
             finalAmount,
             block.timestamp
         );
