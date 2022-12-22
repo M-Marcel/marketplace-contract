@@ -3,7 +3,7 @@ pragma solidity ^0.8.9;
 // pragma solidity >=0.8.4 <0.9.0;
 
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "./ERC721URIStorage.sol";
+import "contracts/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
@@ -55,7 +55,8 @@ contract CloudaxNftMarketplacevvv is
         address payable fundingRecipient;
         uint256 supply; 
         uint256 price;
-        uint256 itemId;   
+        uint256 itemId;
+        uint256 collectionId;   
     }
 
      // structs for an item to be listed
@@ -66,7 +67,8 @@ contract CloudaxNftMarketplacevvv is
         uint256 price;
         address creator;
         uint256 itemId;
-        uint256 tokenId;    
+        uint256 tokenId; 
+        uint256 collectionId;  
     }
 
     struct SoldItem {
@@ -113,7 +115,7 @@ contract CloudaxNftMarketplacevvv is
     mapping(uint256 => Collection) public s_collection;
 
     // mapping of collection to item to TokenId
-    mapping(uint256 => mapping(uint256 => uint256)) public s_collectionToItemToTokens;
+    mapping(uint256 => mapping(uint256 => uint256)) public s_tokensToItemToCollection;
 
 
 
@@ -159,7 +161,8 @@ contract CloudaxNftMarketplacevvv is
         uint256 price,
         address creator,
         uint256 creatorFee,
-        uint256 time
+        uint256 time,
+        uint256 collectionId
     );
 
     //Emitted when a collection is created
@@ -238,6 +241,25 @@ contract CloudaxNftMarketplacevvv is
         _;
     }
 
+    modifier isValidated(address fundingRecipient,uint256 supply){
+        if (fundingRecipient == address(0)) {
+            revert InvalidAddress();
+        }
+        // Check that the track's supply is more than zero(0).
+        if (supply <= 0) {
+            revert QuantityRequired({supply: supply, minRequired: 1});
+        }
+        _;
+    }
+
+    // modifier insufficientPrice(uint256 price){
+    //     if (price > msg.value) {
+    //         revert InsufficientFund({price: listing.price, allowedFund: msg.value});
+    //     }
+    // }
+
+    
+
     modifier isListed(address nftAddress, uint256 tokenId) {
         ListedToken memory listing = s_listedTokens[nftAddress][tokenId];
         if (listing.price <= 0) {
@@ -295,36 +317,27 @@ contract CloudaxNftMarketplacevvv is
     /// @param _fundingRecipient The account that will receive sales revenue.
     /// @param _price The price at which each copy of NFT item or token from a NFT item will be sold, in ETH.
     /// @param _supply The maximum number of NFT item's copy or tokens that can be sold.
-    /// @param _royaltyBPS The royalty amount in bps per copy of a NFT item.
     function _createItem(
         uint256 collectionId,
         string memory itemId,
         address payable _fundingRecipient,
         uint256 _price,
-        uint256 _supply,
-        uint256 _royaltyBPS //// onlyOwner
-    ) private {
-        // Validations
-        if (_fundingRecipient == address(0)) {
-            revert InvalidAddress();
-        }
-
-        // Check that the track's supply is more than zero(0).
-        if (_supply <= 0) {
-            revert QuantityRequired({supply: _supply, minRequired: 1});
-        }
+        uint256 _supply
+    ) private isValidated(_fundingRecipient,_supply) {
 
         _currentItemIndex++;
         emit itemIdPaired(itemId, _nextItemId());
         s_itemIdDBToItemId[itemId] = _nextItemId();
+        Collection memory collection = s_collection[collectionId];
         s_listedItems[address(this)][_nextItemId()] = ListedItem({
             nftAddress: address(this),
             numSold: 0,
-            royaltyBPS: _royaltyBPS,
+            royaltyBPS: collection.creatorFee,
             fundingRecipient: _fundingRecipient,
             supply: _supply,
             price: _price,
-            itemId: _nextItemId()
+            itemId: _nextItemId(),
+            collectionId: collectionId
         });
 
         s_idToItemStatus[_nextItemId()] = TokenStatus.ONSELL;
@@ -336,7 +349,7 @@ contract CloudaxNftMarketplacevvv is
             _fundingRecipient,
             _price,
             _supply,
-            _royaltyBPS,
+            collection.creatorFee,
             block.timestamp
         );
 
@@ -352,9 +365,8 @@ contract CloudaxNftMarketplacevvv is
         string memory _tokenUri,
         uint256 _price,
         uint256 _qty,
-        uint256 _supply,
-        uint256 _royaltyBPS
-    ) external payable nonReentrant {
+        uint256 _supply
+    ) external payable nonReentrant isValidated(_fundingRecipient,_supply) {
         // uint256 id = s_itemIdDBToItemId[itemId];
         require(
             _qty >= 1,
@@ -372,19 +384,15 @@ contract CloudaxNftMarketplacevvv is
                 itemId,
                 _fundingRecipient,
                 _price,
-                _supply,
-                _royaltyBPS
+                _supply
             );
         }
     
         // uint256 itemID = _nextItemId();
         ListedItem memory listing = s_listedItems[address(this)][_nextItemId()];
-        // Collection memory collection = s_collection[collectionId];
-        // uint256 price = listing.price;
-        // uint256 supply = listing.supply;
-        // uint256 numSold = listing.numSold;
+        Collection memory collection = s_collection[collectionId];
+
         // Validations
-        // Check that the item's supply is more than zero(0).
         if (listing.supply <= 0) {
             revert SupplyDoesNotExist({availableSupply: listing.supply});
         }
@@ -415,25 +423,27 @@ contract CloudaxNftMarketplacevvv is
 
         //Deduct the service fee
         uint256 serviceFee = msg.value.mul(SERVICE_FEE).div(100);
-        uint256 royalty = msg.value.mul(s_collection[collectionId].creatorFee).div(100);
+        uint256 royalty = msg.value.mul(collection.creatorFee).div(100);
         uint256 finalAmount = msg.value.sub(serviceFee.add(royalty));
 
 
         // Adding the newly earned money to the total amount a user has earned from an Item.
         s_depositedForItem[_nextItemId()] += finalAmount; // optm
         s_platformEarning += serviceFee;
-        s_indivivdualEarningInPlatform[s_collection[collectionId].fundingRecipient] += finalAmount;
+        s_indivivdualEarningInPlatform[listings.fundingRecipient] += finalAmount;
+        s_indivivdualEarningInPlatform[collection.fundingRecipient] += royalty;
         s_totalAmount += msg.value;
 
         // Send funds to the funding recipient.
-        _sendFunds(s_collection[collectionId].fundingRecipient, finalAmount);
+        _sendFunds(listings.fundingRecipient, finalAmount);
+        _sendFunds(collection.fundingRecipient, royalty);
         
         // Mint a new copy or token from the Item for the buyer
-         safeMint(_qty, _tokenUri);
+         safeMint(_qty, _tokenUri, _nextItemId());
         // Store the mapping of the ID a sold item's copy or token id to the Item being purchased.
         // s_tokenToListedItem[_nextTokenId()] = itemID;
-
         s_idToItemStatus[_nextTokenId()] = TokenStatus.ACTIVE;
+
 
         // emit event of item sold, ths also capture the all tokens minted/purshed under a particular item 
         // NB. event is used over the mapping to optimize for gas usage.
@@ -443,7 +453,7 @@ contract CloudaxNftMarketplacevvv is
             quantity: _qty,
             itemId: _nextItemId(),
             buyer: payable(msg.sender),
-            creator: s_collection[collectionId].fundingRecipient,
+            creator: collection.fundingRecipient,
             itemBaseURI: _tokenUri,
             amountEarned: finalAmount
         });
@@ -451,7 +461,7 @@ contract CloudaxNftMarketplacevvv is
         emit ItemCopySold(
             _nextTokenId(),
             _qty,
-            s_collection[collectionId].fundingRecipient,
+            collection.fundingRecipient,
             msg.sender,
             finalAmount,
             listing.numSold
@@ -489,7 +499,8 @@ contract CloudaxNftMarketplacevvv is
                 fundingRecipient: fundingRecipient,
                 price: price,
                 creator: s_collection[collectionId].fundingRecipient,
-                royaltyBPS: s_collection[collectionId].creatorFee
+                royaltyBPS: s_collection[collectionId].creatorFee,
+                collectionId: collectionId
             });
 
                 emit TokenListed
@@ -501,7 +512,8 @@ contract CloudaxNftMarketplacevvv is
                 price,
                 s_collection[collectionId].fundingRecipient,
                 s_collection[collectionId].creatorFee, 
-                block.timestamp
+                block.timestamp,
+                collectionId
             );
         }
 
@@ -512,7 +524,8 @@ contract CloudaxNftMarketplacevvv is
             fundingRecipient: fundingRecipient,
             price: price,
             creator: address(0),
-            royaltyBPS: 0
+            royaltyBPS: 0,
+            collectionId: 0
         });
 
         s_idToItemStatus[tokenId] = TokenStatus.ONSELL;
@@ -526,7 +539,8 @@ contract CloudaxNftMarketplacevvv is
             price,
             address(0),
             0, 
-            block.timestamp
+            block.timestamp,
+            0
         );
 
        
@@ -542,7 +556,7 @@ contract CloudaxNftMarketplacevvv is
         isListed(nftAddress, tokenId)
         isOwner(nftAddress, tokenId, msg.sender)
     {
-        // ListedToken memory listing = s_listedTokens[nftAddress][tokenId];
+        ListedToken memory listing = s_listedTokens[nftAddress][tokenId];
         s_listedTokens[nftAddress][tokenId].price = newPrice;
          if (nftAddress == address(this)){
                 emit TokenListed
@@ -552,9 +566,10 @@ contract CloudaxNftMarketplacevvv is
                 0,
                 msg.sender,
                 newPrice,
-                s_listedTokens[nftAddress][tokenId].creator,
-                s_listedTokens[nftAddress][tokenId].royaltyBPS,
-                block.timestamp
+                listing.creator,
+                listing.royaltyBPS,
+                block.timestamp,
+                listing.collectionId
             );
         }
         emit TokenListed(
@@ -565,7 +580,8 @@ contract CloudaxNftMarketplacevvv is
             newPrice,
             address(0),
             0,
-            block.timestamp
+            block.timestamp,
+            0
         );
 
        
@@ -648,10 +664,9 @@ contract CloudaxNftMarketplacevvv is
         if (listing.price > msg.value) {
             revert InsufficientFund({price: listing.price, allowedFund: msg.value});
         }
-
+        uint256 serviceFee = msg.value.mul(SERVICE_FEE).div(100);
         if (nftAddress == address(this)){
             //Deduct the service fee
-            uint256 serviceFee = msg.value.mul(SERVICE_FEE).div(100);
             uint256 royalty = msg.value.mul(listing.royaltyBPS).div(100);
             uint256 finalAmount = msg.value.sub(serviceFee.add(royalty));
 
@@ -662,8 +677,6 @@ contract CloudaxNftMarketplacevvv is
             s_indivivdualEarningInPlatform[listing.creator] += finalAmount;
             s_totalAmount += msg.value;
         }
-        //Deduct the fees
-        uint256 serviceFee = msg.value.mul(SERVICE_FEE).div(100);
         uint256 finalAmount = msg.value.sub(serviceFee);
 
         // Update the deposited total for the item.
@@ -728,16 +741,19 @@ contract CloudaxNftMarketplacevvv is
 
     function safeMint(
         uint256 _qty,
-        string memory _uri
+        string memory _uri,
+        uint256 itemId
     ) private {
         _safeMint(msg.sender, _qty);
         uint256 end = _nextTokenId();
         uint256 index = end - _qty;
+        ListedItem memory listing = s_listedItems[address(this)][itemId];
         for (uint i = index; i < end; i++) {
             string memory _tURI = string(
                 abi.encodePacked(_uri, "/", Strings.toString(i))
             );
             _setTokenURI(i, _tURI);
+            s_tokensToItemToCollection[i][listing.itemId] = listing.collectionId;
         }
         
     }
