@@ -7,8 +7,10 @@ import "contracts/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 // 000000000000000000
 // www.cloudax.metadata
+
 
 ////Custom Errors
 error InvalidAddress();
@@ -27,18 +29,21 @@ error CannotSendFund(uint256 senderBalance, uint256 fundTosend);
 error CannotSendZero(uint256 fundTosend);
 
 
-contract CloudaxNftMarketplacevvv is
+contract CloudaxNftMarketplace is
     ReentrancyGuard,
     ERC721URIStorage,
     Ownable
 {
     using SafeMath for uint256;
     using Counters for Counters.Counter;
+    IERC20 private ERC20Token;
 
     // The next token ID to be minted.
     uint256 private _currentItemIndex;
     uint256 private _currentCollectionIndex;
+    uint256 private _currentOfferIndex;
     string private s_contractBaseURI;
+
 
     // % times 200 = 2%
     uint256 private constant SERVICE_FEE = 2;
@@ -89,6 +94,21 @@ contract CloudaxNftMarketplacevvv is
         address owner;
     }
 
+    // Structure to define "make an offer" properties
+    struct OfferOrder {
+        uint256 index; // Offer Index
+        address nftAddress; // Address of the ERC721 NFT Collection contract
+        address addressPaymentToken; // Address of the ERC20 Payment Token contract
+        uint256 tokenIdFrom; // NFT Id
+        uint256 quantity; // NFT Id
+        uint256 itemId; // NFT Id
+        address creator; // Creator of the item
+        address payable winnigOfferAddress; // Address of the winning bider
+        uint256 offerPrice; // Current offer of the offer
+        uint256 offerCount; // Number of offers placed on the item
+    }
+
+
     // Structure to define auction properties
     // struct Auction {
     //     uint256 index; // Auction Index
@@ -116,6 +136,8 @@ contract CloudaxNftMarketplacevvv is
 
     // mapping of collection to item to TokenId
     mapping(uint256 => mapping(uint256 => uint256)) public s_tokensToItemToCollection;
+
+    mapping(uint256 => OfferOrder) private _idToOfferOrder;
 
 
 
@@ -167,6 +189,7 @@ contract CloudaxNftMarketplacevvv is
 
     //Emitted when a collection is created
     event CollectionCreated(
+        uint256 collectionId,
         address indexed fundingRecipient,
         uint256 creatorFee,
         address indexed owner,
@@ -175,6 +198,7 @@ contract CloudaxNftMarketplacevvv is
 
     //Emitted when a collection is created
     event CollectionUpdated(
+        uint256 collectionId,
         address indexed fundingRecipient,
         uint256 creatorFee,
         address indexed owner,
@@ -216,6 +240,50 @@ contract CloudaxNftMarketplacevvv is
     event ItemListingCanceled(address owner, uint256 tokenId, uint256 time);
 
     event CollectionDeleted(address owner, uint256 collectionId, uint256 time);
+
+    event ERC20AddressChanged(address oldAddress, address newAddress);
+
+    event OfferFulfilled(
+        uint256 indexed index, // Offer Index
+        address indexed nftAddress, // Address of the ERC721 NFT Collection contract
+        address addressPaymentToken, // Address of the ERC20 Payment Token contract
+        uint256 tokenIdFrom, // NFT Id
+        uint256 quantity, // NFT Id
+        uint256 itemId, // NFT Id
+        address creator, // Creator of the item
+        address indexed winnigOfferAddress, // Address of the winning bider
+        uint256 offerPrice, // Current offer of the offer
+        uint256 offerCount // Number of offers placed on the item
+    );
+
+    // event OfferFulfilledp2(
+    //     // uint256 indexed index, // Offer Index
+    //     // address indexed nftAddress, // Address of the ERC721 NFT Collection contract
+    //     // address addressPaymentToken, // Address of the ERC20 Payment Token contract
+    //     // uint256 tokenIdFrom, // NFT Id
+    //     // uint256 quantity, // NFT Id
+    //     // uint256 itemId, // NFT Id
+    //     address creator, // Creator of the item
+    //     address indexed winnigOfferAddress, // Address of the winning bider
+    //     uint256 offerPrice, // Current offer of the offer
+    //     uint256 offerCount // Number of offers placed on the item
+    // );
+
+    // event BidIsMade(
+    //     uint256 indexed tokenId,
+    //     uint256 price,
+    //     uint256 numberOfBid,
+    //     address indexed bidder
+    // );
+
+    // event PositiveEndAuction(
+    //     uint256 indexed itemId,
+    //     uint256 endPrice,
+    //     uint256 bidAmount,
+    //     uint256 endTime,
+    //     address indexed seller,
+    //     address indexed winner
+    // );
 
     enum TokenStatus {
         DEFAULT,
@@ -298,6 +366,21 @@ contract CloudaxNftMarketplacevvv is
         return _currentCollectionIndex;
     }
 
+    /**
+     * @dev Returns the starting offer ID.
+     * To change the starting offer ID, please override this function.
+     */
+    function _startOfferId() internal view virtual returns (uint256) {
+        return 0;
+    }
+
+    /**
+     * @dev Returns the next offer ID to be minted.
+     */
+    function _nextOfferId() internal view virtual returns (uint256) {
+        return _currentOfferIndex;
+    }
+
     // This function is used to update or set the CloudaxNFT Base for Opensea compatibiblity
     function setContractBaseURI(string memory __contractBaseURI)
         public
@@ -305,6 +388,12 @@ contract CloudaxNftMarketplacevvv is
     {
         s_contractBaseURI = __contractBaseURI;
     }
+
+    function setERC20Token(address newToken) external onlyOwner {
+        emit ERC20AddressChanged(address(ERC20Token), newToken);
+        ERC20Token = IERC20(newToken);
+    }
+
 
     // This function is used to update or set the CloudaxNFT Listing price
     // function setServiceFee(uint256 __serviceFee) public onlyOwner {
@@ -474,6 +563,397 @@ contract CloudaxNftMarketplacevvv is
             _tokenUri
         );
     }
+
+    function fulfillOfferOrder(
+        address payable _fundingRecipient,
+        uint256 collectionId,
+        string memory itemId,
+        string memory _tokenUri,
+        uint256 _qty,
+        uint256 _supply,
+        uint256 offerCount,
+        uint256 offerPrice,
+        address winnigOfferAddress
+    ) public payable nonReentrant isValidated(_fundingRecipient,_supply) {
+
+        // uint256 id = s_itemIdDBToItemId[itemId];
+        require(
+            _qty >= 1,
+            "Must buy atleast one nft"
+        );
+        require(
+            collectionId <= _nextCollectionId(),
+            "Collection does not exist"
+        );
+        ListedItem memory listings = s_listedItems[address(this)][s_itemIdDBToItemId[itemId]];
+        // uint256 supply = listings.supply;
+        if (listings.itemId != _nextItemId() || listings.supply == 0 || _nextItemId() == 0 )  {
+            _createItem(
+                collectionId,
+                itemId,
+                _fundingRecipient,
+                offerPrice,
+                _supply
+            );
+        }
+    
+        // uint256 itemID = _nextItemId();
+        ListedItem memory listing = s_listedItems[address(this)][_nextItemId()];
+        Collection memory collection = s_collection[collectionId];
+
+        // Validations
+        if (listing.supply <= 0) {
+            revert SupplyDoesNotExist({availableSupply: listing.supply});
+        }
+        // Check that the item's ID is not Zero(0).
+        if (_nextItemId() <= 0) {
+            revert InvalidItemId({itemId: _nextItemId()});
+        }
+        // Check that there are still some copies or tokens of the item that are available for purchase.
+        if (listing.supply <= listing.numSold) {
+            s_idToItemStatus[_nextItemId()] = TokenStatus.SOLDOUT;
+            revert ItemSoldOut({supply: listing.supply, numSold: listing.numSold});
+        }
+        // Check that there will be enough copies or tokens of the item to fulfil purchase order.
+        if (listing.numSold.add(_qty) > listing.supply) {
+            revert NotEnoughNft({supply: listing.supply, numSold: listing.numSold, purchaseQuantityRequest: _qty});
+        }
+        // Check that the buyer approved an amount that is equal or more than the price of the item set by the seller.
+        if (listing.price > msg.value) {
+            revert InsufficientFund({price: listing.price, allowedFund: msg.value});
+        }
+
+        // Increment the number of copies or tokens sold from this Item.
+        listing.numSold = listing.numSold + _qty;
+        s_listedItems[address(this)][_nextItemId()] = listing;
+
+        // https://cloudaxnftmarketplace.xyz/metadata/[USER_ID]/[ITEM_ID]/[TOKEN_ID]
+        // Where _tokenBaseURI = https://cloudaxnftmarketplace.xyz/metadata/[USER_ID]/[ITEM_ID]
+        // Generating a metadata URL for the new copy of the ITEM or Token that was generated.
+
+        ERC20Token.transferFrom(winnigOfferAddress, address(this), offerPrice);
+
+        //Deduct the service fee
+        uint256 serviceFee = msg.value.mul(SERVICE_FEE).div(100);
+        uint256 royalty = msg.value.mul(collection.creatorFee).div(100);
+        uint256 finalAmount = msg.value.sub(serviceFee.add(royalty));
+
+
+        // Adding the newly earned money to the total amount a user has earned from an Item.
+        s_depositedForItem[_nextItemId()] += finalAmount; // optmize
+        s_platformEarning += serviceFee;
+        s_indivivdualEarningInPlatform[listings.fundingRecipient] += finalAmount;
+        s_indivivdualEarningInPlatform[collection.fundingRecipient] += royalty;
+        s_totalAmount += msg.value;
+
+        // Send funds to the funding recipient.
+        ERC20Token.transferFrom(address(this), listings.fundingRecipient, finalAmount);
+        ERC20Token.transferFrom(address(this), collection.fundingRecipient, royalty);
+
+        string memory uri = _tokenUri;
+        uint256 qty = _qty;
+        
+        // Mint a new copy or token from the Item for the buyer
+         safeMint(_qty, uri, _nextItemId());
+        s_idToItemStatus[_nextTokenId()] = TokenStatus.ACTIVE;
+
+        _idToOfferOrder[_nextOfferId()] = OfferOrder({
+            index: _nextOfferId(),
+            nftAddress: address(this),
+            addressPaymentToken: address(ERC20Token),
+            tokenIdFrom: _nextTokenId(),
+            quantity: qty,
+            itemId: _nextItemId(),
+            winnigOfferAddress: payable(winnigOfferAddress),
+            creator: collection.fundingRecipient,
+            offerPrice: offerPrice,
+            offerCount: offerCount
+        });
+
+ 
+        s_soldItems[address(this)][_nextTokenId()] = SoldItem({
+            nftAddress: address(this),
+            tokenIdFrom: _nextTokenId(),
+            quantity: qty,
+            itemId: _nextItemId(),
+            buyer: payable(winnigOfferAddress),
+            creator: collection.fundingRecipient,
+            itemBaseURI: uri,
+            amountEarned: finalAmount
+        });
+
+        uint256 offerC = offerCount;
+        uint256 offerP = offerPrice;
+        address receiver = payable(winnigOfferAddress);
+
+        emit OfferFulfilled(
+            _nextOfferId(),
+            address(this),
+            address(ERC20Token),
+            _nextTokenId(),
+            qty,
+            _currentItemIndex,
+            receiver,
+            collection.fundingRecipient,
+            offerP,
+            offerC 
+        );
+        
+    }
+
+
+    //     function fulfillOfferOrderResell(
+    //     address payable _fundingRecipient,
+    //     uint256 collectionId,
+    //     address nftAddress,
+    //     uint256 tokenId,
+    //     uint256 _supply,
+    //     uint256 offerCount,
+    //     uint256 offerPrice,
+    //     address winnigOfferAddress
+    // ) public payable nonReentrant isOwner(nftAddress, tokenId, msg.sender) {
+
+    //     require(
+    //         collectionId <= _nextCollectionId(),
+    //         "Collection does not exist"
+    //     );
+    //     require(
+    //         _fundingRecipient == msg.sender,
+    //         "Only the nft owner can receive payment for nft"
+    //     );
+    //     if (offerPrice <= 0) {
+    //         revert PriceMustBeAboveZero();
+    //     }
+
+    //     ListedToken memory listing = s_listedTokens[nftAddress][tokenId];
+    //     Collection memory collection = s_collection[collectionId];
+
+    //     uint256 serviceFee = msg.value.mul(SERVICE_FEE).div(100);
+    //     // uint256 fundingR = _fundingRecipient;
+
+    //     if (nftAddress == address(this)){
+    //         s_listedTokens[nftAddress][tokenId] = ListedToken({
+    //             nftAddress: nftAddress,
+    //             itemId: 0,
+    //             tokenId: tokenId,
+    //             fundingRecipient: payable(msg.sender),
+    //             price: offerPrice,
+    //             creator: collection.fundingRecipient,
+    //             royaltyBPS: collection.creatorFee,
+    //             collectionId: collectionId
+    //         });
+
+    //             emit TokenListed
+    //         (
+    //             nftAddress, 
+    //             tokenId, 
+    //             0, 
+    //             msg.sender, 
+    //             offerPrice,
+    //             collection.fundingRecipient,
+    //             collection.creatorFee, 
+    //             block.timestamp,
+    //             collectionId
+    //         );
+
+    //         //Deduct the service fee
+    //         // uint256 serviceFee = msg.value.mul(SERVICE_FEE).div(100);
+    //         uint256 royalty = msg.value.mul(listing.royaltyBPS).div(100);
+    //         uint256 finalAmount = msg.value.sub(serviceFee.add(royalty));
+
+
+    //         // Adding the newly earned money to the total amount a user has earned from an Item.
+    //         s_depositedForItem[_nextItemId()] += finalAmount; // optm
+    //         s_platformEarning += serviceFee;
+    //         s_indivivdualEarningInPlatform[listing.creator] += finalAmount;
+    //         s_totalAmount += msg.value;
+    //     }
+
+    //         s_listedTokens[nftAddress][tokenId] = ListedToken({
+    //         nftAddress: nftAddress,
+    //         itemId: 0,
+    //         tokenId: tokenId,
+    //         fundingRecipient: _fundingRecipient,
+    //         price: offerPrice,
+    //         creator: address(0),
+    //         royaltyBPS: 0,
+    //         collectionId: 0
+    //     });
+
+    //     s_idToItemStatus[tokenId] = TokenStatus.ONSELL;
+
+    //     emit TokenListed
+    //     (
+    //         nftAddress, 
+    //         tokenId, 
+    //         0, 
+    //         msg.sender, 
+    //         offerPrice,
+    //         address(0),
+    //         0, 
+    //         block.timestamp,
+    //         0
+    //     );
+
+    //     uint256 finalAmount = msg.value.sub(serviceFee);
+
+    //     // Update the deposited total for the item.
+    //     // Adding the newly earned money to the total amount a user has earned from an Item.
+    //     s_depositedForItem[tokenId] += finalAmount;
+    //     s_indivivdualEarningInPlatform[
+    //         listing.creator
+    //     ] += finalAmount;
+    //     s_platformEarning += serviceFee;
+    //     s_totalAmount += msg.value;
+
+        
+    //     // Send funds to the funding recipient.
+    //     ERC20Token.transferFrom(address(this), listings.fundingRecipient, finalAmount);
+    //     ERC20Token.transferFrom(address(this), collection.fundingRecipient, royalty);
+
+    //     // transfer nft to buyer
+    //      IERC721A(nftAddress).safeTransferFrom(listing.creator, msg.sender, tokenId);
+
+    //     s_idToItemStatus[tokenId] = TokenStatus.ACTIVE;
+
+    //     emit NftSold(
+    //         nftAddress,
+    //         tokenId,
+    //         0,
+    //         msg.sender,
+    //         listing.creator,
+    //         "",
+    //         finalAmount,
+    //         block.timestamp
+    //     );
+        
+    // }
+
+    // function fulfillOfferOrderResell(
+    //     address payable _fundingRecipient,
+    //     uint256 collectionId,
+    //     address nftAddress,
+    //     uint256 tokenId,
+    //     uint256 _supply,
+    //     uint256 offerCount,
+    //     uint256 offerPrice,
+    //     address winnigOfferAddress
+    // ) public payable nonReentrant isOwner(nftAddress, tokenId, msg.sender) {
+
+    //     require(
+    //         collectionId <= _nextCollectionId(),
+    //         "Collection does not exist"
+    //     );
+    //     require(
+    //         _fundingRecipient == msg.sender,
+    //         "Only the nft owner can receive payment for nft"
+    //     );
+    //     if (offerPrice <= 0) {
+    //         revert PriceMustBeAboveZero();
+    //     }
+
+    //     ListedToken memory listing = s_listedTokens[nftAddress][tokenId];
+    //     Collection memory collection = s_collection[collectionId];
+
+    //     uint256 serviceFee = msg.value.mul(SERVICE_FEE).div(100);
+    //     // uint256 fundingR = _fundingRecipient;
+
+    //     if (nftAddress == address(this)){
+    //         s_listedTokens[nftAddress][tokenId] = ListedToken({
+    //             nftAddress: nftAddress,
+    //             itemId: 0,
+    //             tokenId: tokenId,
+    //             fundingRecipient: payable(msg.sender),
+    //             price: offerPrice,
+    //             creator: collection.fundingRecipient,
+    //             royaltyBPS: collection.creatorFee,
+    //             collectionId: collectionId
+    //         });
+
+    //             emit TokenListed
+    //         (
+    //             nftAddress, 
+    //             tokenId, 
+    //             0, 
+    //             msg.sender, 
+    //             offerPrice,
+    //             collection.fundingRecipient,
+    //             collection.creatorFee, 
+    //             block.timestamp,
+    //             collectionId
+    //         );
+
+    //         //Deduct the service fee
+    //         uint256 serviceFee = msg.value.mul(SERVICE_FEE).div(100);
+    //         uint256 royalty = msg.value.mul(listing.royaltyBPS).div(100);
+    //         uint256 finalAmount = msg.value.sub(serviceFee.add(royalty));
+
+
+    //         // Adding the newly earned money to the total amount a user has earned from an Item.
+    //         s_depositedForItem[_nextItemId()] += finalAmount; // optm
+    //         s_platformEarning += serviceFee;
+    //         s_indivivdualEarningInPlatform[listing.creator] += finalAmount;
+    //         s_totalAmount += msg.value;
+    //     }
+
+    //         s_listedTokens[nftAddress][tokenId] = ListedToken({
+    //         nftAddress: nftAddress,
+    //         itemId: 0,
+    //         tokenId: tokenId,
+    //         fundingRecipient: _fundingRecipient,
+    //         price: offerPrice,
+    //         creator: address(0),
+    //         royaltyBPS: 0,
+    //         collectionId: 0
+    //     });
+
+    //     s_idToItemStatus[tokenId] = TokenStatus.ONSELL;
+
+    //     emit TokenListed
+    //     (
+    //         nftAddress, 
+    //         tokenId, 
+    //         0, 
+    //         msg.sender, 
+    //         offerPrice,
+    //         address(0),
+    //         0, 
+    //         block.timestamp,
+    //         0
+    //     );
+
+    //     uint256 finalAmount = msg.value.sub(serviceFee);
+
+    //     // Update the deposited total for the item.
+    //     // Adding the newly earned money to the total amount a user has earned from an Item.
+    //     s_depositedForItem[tokenId] += finalAmount;
+    //     s_indivivdualEarningInPlatform[
+    //         listing.creator
+    //     ] += finalAmount;
+    //     s_platformEarning += serviceFee;
+    //     s_totalAmount += msg.value;
+
+        
+    //     // Send funds to the funding recipient.
+    //     _sendFunds(payable(listing.creator), finalAmount);
+
+    //     // transfer nft to buyer
+    //      IERC721A(nftAddress).safeTransferFrom(listing.creator, msg.sender, tokenId);
+
+    //     s_idToItemStatus[tokenId] = TokenStatus.ACTIVE;
+
+    //     emit NftSold(
+    //         nftAddress,
+    //         tokenId,
+    //         0,
+    //         msg.sender,
+    //         listing.creator,
+    //         "",
+    //         finalAmount,
+    //         block.timestamp
+    //     );
+        
+    // }
     
     function listToken(
         address nftAddress,
@@ -613,7 +1093,7 @@ contract CloudaxNftMarketplacevvv is
             owner: msg.sender
         });
 
-        emit CollectionCreated(fundingRecipient, creatorFee, msg.sender, block.timestamp);
+        emit CollectionCreated(_nextCollectionId(), fundingRecipient, creatorFee, msg.sender, block.timestamp);
     }
 
     function updateCollection(
@@ -636,7 +1116,7 @@ contract CloudaxNftMarketplacevvv is
             owner: msg.sender
         });
 
-        emit CollectionUpdated(fundingRecipient, creatorFee, msg.sender, block.timestamp);
+        emit CollectionUpdated(collectionId, fundingRecipient, creatorFee, msg.sender, block.timestamp);
     }
 
     function deleteCollection(uint256 collectionId)
@@ -721,6 +1201,7 @@ contract CloudaxNftMarketplacevvv is
    
 
     }
+
 
     /// @notice Sends funds to an address
     /// @param _recipient The address to send funds to
