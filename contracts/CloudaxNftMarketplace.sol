@@ -29,7 +29,7 @@ error CannotSendFund(uint256 senderBalance, uint256 fundTosend);
 error CannotSendZero(uint256 fundTosend);
 
 
-contract CloudaxNftMarketplacevvv is
+contract CloudaxNftMarketplace is
     ReentrancyGuard,
     ERC721URIStorage,
     Ownable
