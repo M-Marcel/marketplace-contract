@@ -1,4 +1,4 @@
-# Cloudax Token
+# Cloudax NFT Marketplace Smart contract
 
 Try running some of the following tasks:
 
