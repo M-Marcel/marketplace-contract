@@ -4,14 +4,10 @@ pragma solidity ^0.8.9;
 
 import "./CloudaxMarketplace.sol";
 
-
-contract AuctionFulfillment is
-    CloudaxMarketplace
-{
-
+contract AuctionFulfillment is CloudaxMarketplace {
     using SafeMath for uint256;
 
-     // Structure to define auction properties
+    // Structure to define auction properties
     struct Auction {
         uint256 index; // Auction Index
         address addressNFTCollection; // Address of the ERC721 NFT Collection contract
@@ -34,7 +30,7 @@ contract AuctionFulfillment is
         AuctionStatus status;
     }
 
-        // mapping of auctionId to Auction struct
+    // mapping of auctionId to Auction struct
     mapping(uint256 => Auction) internal _idToAuction;
 
     event StartAuction(
@@ -57,7 +53,7 @@ contract AuctionFulfillment is
         address indexed bidder
     );
 
-     event NegativeEndAuction(
+    event NegativeEndAuction(
         uint256 indexed auctionId,
         address indexed nftAddress,
         address seller,
@@ -82,7 +78,7 @@ contract AuctionFulfillment is
 
     event EventCanceled(uint256 indexed auctionId, address indexed seller);
 
-     enum AuctionStatus {
+    enum AuctionStatus {
         DEFAULT,
         ACTIVE,
         SUCCESSFUL_ENDED,
@@ -91,7 +87,7 @@ contract AuctionFulfillment is
 
     constructor() {}
 
-     modifier AuctionIsActive(uint256 auctionId) {
+    modifier AuctionIsActive(uint256 auctionId) {
         require(
             _idToAuction[auctionId].status == AuctionStatus.ACTIVE,
             "Auction already ended!"
@@ -114,7 +110,6 @@ contract AuctionFulfillment is
         return _currentAuctionIndex;
     }
 
-
     function listItemOnAuction(
         uint256 collectionId,
         string memory itemId,
@@ -124,21 +119,9 @@ contract AuctionFulfillment is
         uint256 reservedPrice,
         uint256 _supply,
         uint256 duration
-        )
-        external
-        isValidated(_fundingRecipient,_supply)
-        // isActive(tokenId) 
-        /* Adjust enum, remove SOLDOUT, make all listed token ONSELL and everyoter free nft ACTIVE. TokenStatus mapped to nft address mapped to TokenId */
-    {
-
-        require(
-            _fundingRecipient == msg.sender, 
-            "Only nft owner can sell nft"
-        );
-        require(
-            startPrice > 0,
-            "Starting price must be greater than zero"
-        );
+    ) external isValidated(_fundingRecipient, _supply) {
+        require(_fundingRecipient == msg.sender, "Only nft owner can sell nft");
+        require(startPrice > 0, "Starting price must be greater than zero");
         require(
             reservedPrice >= startPrice,
             "reserved price should not be less than the starting price"
@@ -169,13 +152,9 @@ contract AuctionFulfillment is
             block.timestamp
         );
 
-        // address owner = NFT.ownerOf(tokenId);
-        // NFT.safeTransferFrom(owner, address(this), tokenId);
-
         uint256 day = 1 days;
         uint256 mul_duration = day.mul(duration);
 
-        // _idToItemStatus[tokenId] = TokenStatus.ONAUCTION;
         _currentAuctionIndex++;
         _idToAuction[_currentAuctionIndex] = Auction(
             _currentAuctionIndex,
@@ -197,12 +176,12 @@ contract AuctionFulfillment is
             0,
             mul_duration,
             AuctionStatus.ACTIVE
-        );  
+        );
 
         emit StartAuction(
-            _nextAuctionId(), 
-            address(this), 
-            address(ERC20Token), 
+            _nextAuctionId(),
+            address(this),
+            address(ERC20Token),
             _supply,
             _nextItemId(),
             msg.sender,
@@ -210,365 +189,14 @@ contract AuctionFulfillment is
             reservedPrice,
             block.timestamp,
             mul_duration
-        );  
+        );
     }
 
-
-    // function listItemOnAuction(
-    //     uint256 collectionId,
-    //     string memory itemId,
-    //     address payable _fundingRecipient,
-    //     string memory _tokenUri,
-    //     address nftAddress,
-    //     uint256 tokenId,
-    //     uint256 startPrice,
-    //     uint256 reservedPrice,
-    //     uint256 _supply,
-    //     uint256 duration,
-    //     bool resell
-    // )
-    //     external
-    //     isValidated(_fundingRecipient,_supply)
-    //     // isActive(tokenId) 
-    //     /* Adjust enum, remove SOLDOUT, make all listed token ONSELL and everyoter free nft ACTIVE. TokenStatus mapped to nft address mapped to TokenId */
-    // {
-
-    //     require(
-    //         _fundingRecipient == msg.sender, 
-    //         "Only nft owner can sell nft"
-    //     );
-    //     require(
-    //         startPrice > 0,
-    //         "Starting price must be greater than zero"
-    //     );
-    //     require(
-    //         reservedPrice >= startPrice,
-    //         "reserved price should not be less than the starting price"
-    //     );
-    //     _currentItemIndex++;
-    //     emit itemIdPaired(itemId, _nextItemId());
-    //     s_itemIdDBToItemId[itemId] = _nextItemId();
-    //     Collection memory collection = s_collection[collectionId];
-    //     uint256 day = 1 days;
-    //     uint256 mul_duration = day.mul(duration);
-
-    //     if(resell){
-    //         if (nftAddress == address(this)){
-    //             s_listedTokens[nftAddress][tokenId] = ListedToken({
-    //                 nftAddress: nftAddress,
-    //                 itemId: 0,
-    //                 tokenId: tokenId,
-    //                 fundingRecipient: _fundingRecipient,
-    //                 price: startPrice,
-    //                 creator: collection.fundingRecipient,
-    //                 royaltyBPS: collection.creatorFee,
-    //                 collectionId: collectionId
-    //             });
-    //             _currentAuctionIndex++;
-    //             _idToAuction[_currentAuctionIndex] = Auction(
-    //                 _currentAuctionIndex,
-    //                 address(this),
-    //                 address(ERC20Token),
-    //                 _supply,
-    //                 0,
-    //                 startPrice,
-    //                 reservedPrice,
-    //                 collectionId,
-    //                 "",
-    //                 block.timestamp,
-    //                 _nextItemId(),
-    //                 tokenId,
-    //                 _fundingRecipient,
-    //                 0,
-    //                 0,
-    //                 (address(0)),
-    //                 0,
-    //                 mul_duration,
-    //                 AuctionStatus.ACTIVE
-    //             );
-
-    //                 emit TokenListed
-    //             (
-    //                 nftAddress, 
-    //                 tokenId, 
-    //                 0, 
-    //                 msg.sender, 
-    //                 startPrice,
-    //                 collection.fundingRecipient,
-    //                 collection.creatorFee, 
-    //                 block.timestamp,
-    //                 collectionId
-    //             );
-    //         }else{
-    //             s_listedTokens[nftAddress][tokenId] = ListedToken({
-    //                 nftAddress: nftAddress,
-    //                 itemId: 0,
-    //                 tokenId: tokenId,
-    //                 fundingRecipient: _fundingRecipient,
-    //                 price: startPrice,
-    //                 creator: address(0),
-    //                 royaltyBPS: 0,
-    //                 collectionId: 0
-    //             });
-
-    //             _currentAuctionIndex++;
-    //             _idToAuction[_currentAuctionIndex] = Auction(
-    //                 _currentAuctionIndex,
-    //                 nftAddress,
-    //                 address(ERC20Token),
-    //                 _supply,
-    //                 0,
-    //                 startPrice,
-    //                 reservedPrice,
-    //                 collectionId,
-    //                 "",
-    //                 block.timestamp,
-    //                 _nextItemId(),
-    //                 tokenId,
-    //                 _fundingRecipient,
-    //                 0,
-    //                 0,
-    //                 (address(0)),
-    //                 0,
-    //                 mul_duration,
-    //                 AuctionStatus.ACTIVE
-    //             );
-    //             emit TokenListed
-    //             (
-    //                 nftAddress, 
-    //                 tokenId, 
-    //                 0, 
-    //                 msg.sender, 
-    //                 startPrice,
-    //                 collection.fundingRecipient,
-    //                 collection.creatorFee, 
-    //                 block.timestamp,
-    //                 collectionId
-    //             );
-    //         }     
-    //     }else{
-
-    //         s_listedItems[address(this)][_nextItemId()] = ListedItem({
-    //             nftAddress: address(this),
-    //             numSold: 0,
-    //             royaltyBPS: collection.creatorFee,
-    //             fundingRecipient: payable(_fundingRecipient),
-    //             supply: _supply,
-    //             price: startPrice,
-    //             itemId: _nextItemId(),
-    //             collectionId: collectionId
-    //         });
-
-    //         emit ItemCreated(
-    //             address(this),
-    //             _nextItemId(),
-    //             itemId,
-    //             _fundingRecipient,
-    //             startPrice,
-    //             _supply,
-    //             collection.creatorFee,
-    //             block.timestamp
-    //         );
-
-    //         // address owner = NFT.ownerOf(tokenId);
-    //         // NFT.safeTransferFrom(owner, address(this), tokenId);
-
-    //         // _idToItemStatus[tokenId] = TokenStatus.ONAUCTION;
-    //         _currentAuctionIndex++;
-    //         _idToAuction[_currentAuctionIndex] = Auction(
-    //             _currentAuctionIndex,
-    //             address(this),
-    //             address(ERC20Token),
-    //             _supply,
-    //             0,
-    //             startPrice,
-    //             reservedPrice,
-    //             collectionId,
-    //             _tokenUri,
-    //             block.timestamp,
-    //             _nextItemId(),
-    //             0,
-    //             _fundingRecipient,
-    //             0,
-    //             0,
-    //             (address(0)),
-    //             0,
-    //             mul_duration,
-    //             AuctionStatus.ACTIVE
-    //         );  
-    //     }
-
-    //     emit StartAuction(
-    //         _nextAuctionId(), 
-    //         address(this), 
-    //         address(ERC20Token), 
-    //         _supply,
-    //         _nextItemId(),
-    //         msg.sender,
-    //         startPrice,
-    //         reservedPrice,
-    //         block.timestamp,
-    //         mul_duration
-    //     );  
-    // }
-
-
-    // function listItemOnAuctionResell(
-    //     uint256 collectionId,
-    //     string memory itemId,
-    //     address payable _fundingRecipient,
-    //     address nftAddress,
-    //     uint256 tokenId,
-    //     uint256 startPrice,
-    //     uint256 reservedPrice,
-    //     uint256 _supply,
-    //     uint256 duration
-    //     )
-    //     external
-    //     isValidated(_fundingRecipient,_supply)
-    //     // isActive(tokenId) 
-    //     /* Adjust enum, remove SOLDOUT, make all listed token ONSELL and everyoter free nft ACTIVE. TokenStatus mapped to nft address mapped to TokenId */
-    // {
-
-    //     require(
-    //         _fundingRecipient == msg.sender, 
-    //         "Only nft owner can sell nft"
-    //     );
-    //     require(
-    //         startPrice > 0,
-    //         "Starting price must be greater than zero"
-    //     );
-    //     require(
-    //         reservedPrice >= startPrice,
-    //         "reserved price should not be less than the starting price"
-    //     );
-    //     _currentItemIndex++;
-    //     emit itemIdPaired(itemId, _nextItemId());
-    //     s_itemIdDBToItemId[itemId] = _nextItemId();
-    //     Collection memory collection = s_collection[collectionId];
-    //     uint256 day = 1 days;
-    //     uint256 mul_duration = day.mul(duration);
-
-    //    if (nftAddress == address(this)){
-    //         s_listedTokens[nftAddress][tokenId] = ListedToken({
-    //             nftAddress: nftAddress,
-    //             itemId: 0,
-    //             tokenId: tokenId,
-    //             fundingRecipient: _fundingRecipient,
-    //             price: startPrice,
-    //             creator: collection.fundingRecipient,
-    //             royaltyBPS: collection.creatorFee,
-    //             collectionId: collectionId
-    //         });
-
-    //         _idToAuction[_currentAuctionIndex] = Auction(
-    //             _currentAuctionIndex,
-    //             address(this),
-    //             address(ERC20Token),
-    //             _supply,
-    //             0,
-    //             startPrice,
-    //             reservedPrice,
-    //             collectionId,
-    //             "",
-    //             block.timestamp,
-    //             _nextItemId(),
-    //             tokenId,
-    //             _fundingRecipient,
-    //             0,
-    //             0,
-    //             payable(address(0)),
-    //             0,
-    //             mul_duration,
-    //             AuctionStatus.ACTIVE
-    //         );
-
-    //             emit TokenListed
-    //         (
-    //             nftAddress, 
-    //             tokenId, 
-    //             0, 
-    //             msg.sender, 
-    //             startPrice,
-    //             collection.fundingRecipient,
-    //             collection.creatorFee, 
-    //             block.timestamp,
-    //             collectionId
-    //         );
-    //     }else{
-    //         s_listedTokens[nftAddress][tokenId] = ListedToken({
-    //         nftAddress: nftAddress,
-    //         itemId: 0,
-    //         tokenId: tokenId,
-    //         fundingRecipient: _fundingRecipient,
-    //         price: startPrice,
-    //         creator: address(0),
-    //         royaltyBPS: 0,
-    //         collectionId: 0
-    //     });
-    //         emit TokenListed
-    //         (
-    //             nftAddress, 
-    //             tokenId, 
-    //             0, 
-    //             msg.sender, 
-    //             startPrice,
-    //             collection.fundingRecipient,
-    //             collection.creatorFee, 
-    //             block.timestamp,
-    //             collectionId
-    //         );
-    //     }
-
-        
-
-    //     // address owner = NFT.ownerOf(tokenId);
-    //     // NFT.safeTransferFrom(owner, address(this), tokenId);
-
-       
-
-    //     // _idToItemStatus[tokenId] = TokenStatus.ONAUCTION;
-    //     _currentAuctionIndex++;
-    //     _idToAuction[_currentAuctionIndex] = Auction(
-    //         _currentAuctionIndex,
-    //         address(this),
-    //         address(ERC20Token),
-    //         _supply,
-    //         0,
-    //         startPrice,
-    //         reservedPrice,
-    //         collectionId,
-    //         "",
-    //         block.timestamp,
-    //         _nextItemId(),
-    //         tokenId,
-    //         _fundingRecipient,
-    //         0,
-    //         0,
-    //         payable(address(0)),
-    //         0,
-    //         mul_duration,
-    //         AuctionStatus.ACTIVE
-    //     );  
-
-    //     emit StartAuction(
-    //         _nextAuctionId(), 
-    //         address(this), 
-    //         address(ERC20Token), 
-    //         _supply,
-    //         _nextItemId(),
-    //         msg.sender,
-    //         startPrice,
-    //         reservedPrice,
-    //         block.timestamp,
-    //         mul_duration
-    //     );  
-    // }
-
-    function makeBid(uint256 quantity, uint256 price, uint256 auctionId)
-        external
-        AuctionIsActive(auctionId)
-    {
+    function makeBid(
+        uint256 quantity,
+        uint256 price,
+        uint256 auctionId
+    ) external AuctionIsActive(auctionId) {
         Auction memory order = _idToAuction[auctionId];
 
         require(
@@ -577,20 +205,25 @@ contract AuctionFulfillment is
         );
 
         require(
-            quantity <= order.supply, 
+            quantity <= order.supply,
             "Not enough NFT listed for this auction"
         );
 
         if (order.startPrice != 0) {
-            if(ERC20Token.transfer(order.lastBidder, order.currentBidPrice) == !true){
+            if (
+                ERC20Token.transfer(order.lastBidder, order.currentBidPrice) ==
+                !true
+            ) {
                 revert TransferNotCompleted({
-                    senderBalance: ERC20Token.balanceOf(order.lastBidder),
+                    senderBalance: ERC20Token.balanceOf(address(this)),
                     fundTosend: order.currentBidPrice
                 });
-            }     
+            }
         }
 
-        if(ERC20Token.transferFrom(msg.sender, address(this), price) == !true){
+        if (
+            ERC20Token.transferFrom(msg.sender, address(this), price) == !true
+        ) {
             revert TransferNotCompleted({
                 senderBalance: ERC20Token.balanceOf(msg.sender),
                 fundTosend: price
@@ -606,11 +239,9 @@ contract AuctionFulfillment is
         emit BidIsMade(auctionId, price, order.bidAmount, order.lastBidder);
     }
 
-    function finishAuction(uint256 auctionId)
-        external
-        AuctionIsActive(auctionId)
-        nonReentrant
-    {
+    function finishAuction(
+        uint256 auctionId
+    ) external AuctionIsActive(auctionId) nonReentrant {
         Auction memory order = _idToAuction[auctionId];
 
         require(
@@ -621,7 +252,7 @@ contract AuctionFulfillment is
         if (order.reservedPrice > order.currentBidPrice) {
             _cancelAuction(auctionId);
             emit NegativeEndAuction(
-                auctionId, 
+                auctionId,
                 order.addressNFTCollection,
                 order.owner,
                 order.quantity,
@@ -629,21 +260,22 @@ contract AuctionFulfillment is
                 order.currentBidPrice,
                 order.bidAmount,
                 block.timestamp
-                );
+            );
             return;
         }
 
         Collection memory collection = s_collection[order.collectionId];
 
-        // order.itemBaseURI
-
         // NFT.safeTransferFrom(address(this), order.lastBidder, tokenId);
 
         //Deduct the service fee
         uint256 serviceFee = order.currentBidPrice.mul(SERVICE_FEE).div(100);
-        uint256 royalty = order.currentBidPrice.mul(collection.creatorFee).div(100);
-        uint256 finalAmount = order.currentBidPrice.sub(serviceFee.add(royalty));
-
+        uint256 royalty = order.currentBidPrice.mul(collection.creatorFee).div(
+            100
+        );
+        uint256 finalAmount = order.currentBidPrice.sub(
+            serviceFee.add(royalty)
+        );
 
         // Adding the newly earned money to the total amount a user has earned from an Item.
         s_depositedForItem[_nextItemId()] += finalAmount; // optmize
@@ -652,14 +284,16 @@ contract AuctionFulfillment is
         s_indivivdualEarningInPlatform[collection.fundingRecipient] += royalty;
         s_totalAmount += finalAmount;
 
-        if(ERC20Token.transfer(order.owner, finalAmount) == !true){
+        if (ERC20Token.transfer(order.owner, finalAmount) == !true) {
             revert TransferNotCompleted({
-                senderBalance: ERC20Token.balanceOf(order.owner),
-                fundTosend: order.currentBidPrice
+                senderBalance: ERC20Token.balanceOf(address(this)),
+                fundTosend: finalAmount
             });
         }
 
-        if(ERC20Token.transfer(collection.fundingRecipient, royalty) == !true){
+        if (
+            ERC20Token.transfer(collection.fundingRecipient, royalty) == !true
+        ) {
             revert TransferNotCompleted({
                 senderBalance: ERC20Token.balanceOf(address(this)),
                 fundTosend: royalty
@@ -667,7 +301,7 @@ contract AuctionFulfillment is
         }
 
         // Mint a new copy or token from the Item for the buyer
-         safeMint(1, order.itemBaseURI, _nextItemId()); 
+        safeMintOut(1, order.itemBaseURI, _nextItemId(), order.lastBidder);
 
         order.status = AuctionStatus.SUCCESSFUL_ENDED;
         // _idToItemStatus[tokenId] = TokenStatus.ACTIVE;
@@ -701,7 +335,7 @@ contract AuctionFulfillment is
     //     if (order.reservedPrice > order.currentBidPrice) {
     //         _cancelAuction(auctionId);
     //         emit NegativeEndAuction(
-    //             auctionId, 
+    //             auctionId,
     //             order.addressNFTCollection,
     //             order.owner,
     //             order.quantity,
@@ -723,7 +357,6 @@ contract AuctionFulfillment is
     //     uint256 serviceFee = order.currentBidPrice.mul(SERVICE_FEE).div(100);
     //     uint256 royalty = order.currentBidPrice.mul(collection.creatorFee).div(100);
     //     uint256 finalAmount = order.currentBidPrice.sub(serviceFee.add(royalty));
-
 
     //     // Adding the newly earned money to the total amount a user has earned from an Item.
     //     s_depositedForItem[_nextItemId()] += finalAmount; // optmize
@@ -747,7 +380,7 @@ contract AuctionFulfillment is
     //     }
 
     //     // Mint a new copy or token from the Item for the buyer
-    //      safeMint(1, order.itemBaseURI, _nextItemId()); 
+    //      safeMint(1, order.itemBaseURI, _nextItemId());
 
     //     order.status = AuctionStatus.SUCCESSFUL_ENDED;
     //     // _idToItemStatus[tokenId] = TokenStatus.ACTIVE;
@@ -796,5 +429,4 @@ contract AuctionFulfillment is
         _cancelAuction(auctionId);
         emit EventCanceled(auctionId, msg.sender);
     }
-    
 }

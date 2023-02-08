@@ -5,22 +5,17 @@ pragma solidity ^0.8.9;
 import "./OrderFulfillment.sol";
 import "./AuctionFulfillment.sol";
 
+// 000000000000000000
 
-contract Marketplace is
-    OrderFulfillment,
-    AuctionFulfillment
-{
+contract Marketplace is OrderFulfillment, AuctionFulfillment {
     /// @notice Returns the CloudaxNFT Listing price
     function getServiceFee() public pure returns (uint256) {
         return SERVICE_FEE;
     }
 
-
-    function getTokenStatus(uint256 tokenId)
-        external
-        view
-        returns (TokenStatus)
-    {
+    function getTokenStatus(
+        uint256 tokenId
+    ) external view returns (TokenStatus) {
         return s_idToItemStatus[tokenId];
     }
 
