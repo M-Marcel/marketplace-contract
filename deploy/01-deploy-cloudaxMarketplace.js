@@ -9,14 +9,14 @@ module.exports = async function () {
     // const { deployer } = await getNamedAccounts()
 
     // const gas = await ethers.provider.getGasPrice()
-    const CloudaxNftMarketplace = await ethers.getContractFactory("CloudaxNftMarketplace")
+    const Marketplace = await ethers.getContractFactory("Marketplace")
 
 
     // log("-----------------------------------------------")
 
-    const cloudaxNftMarketplace = await CloudaxNftMarketplace.deploy()
+    const marketplace = await Marketplace.deploy()
 
-    console.log("Deploying Cloudax...", cloudaxNftMarketplace.address)
+    console.log("Deploying Marketplace...", marketplace.address)
 
     // if (process.env.ETHERSCAN_API_KEY) {
     //     console.log("Verifying Cloudax Marketplace...")

@@ -20,13 +20,15 @@ contract AuctionFulfillment is
         uint256 quantity;
         uint256 startPrice;
         uint256 reservedPrice;
+        uint256 collectionId;
+        string itemBaseURI;
         uint256 startTime;
         uint256 itemId; // NFT Id
         uint256 tokenId; // tokenId
         address owner; // Creator of the Auction
         uint256 currentBidPrice; // Current highest bid for the auction
         uint256 endAuction; // Timestamp for the end day&time of the auction
-        address payable lastBidder;
+        address lastBidder;
         uint256 bidAmount; // Number of bid placed on the auction
         uint256 duration;
         AuctionStatus status;
@@ -117,6 +119,7 @@ contract AuctionFulfillment is
         uint256 collectionId,
         string memory itemId,
         address payable _fundingRecipient,
+        string memory _tokenUri,
         uint256 startPrice,
         uint256 reservedPrice,
         uint256 _supply,
@@ -148,7 +151,7 @@ contract AuctionFulfillment is
             nftAddress: address(this),
             numSold: 0,
             royaltyBPS: collection.creatorFee,
-            fundingRecipient: _fundingRecipient,
+            fundingRecipient: payable(_fundingRecipient),
             supply: _supply,
             price: startPrice,
             itemId: _nextItemId(),
@@ -182,13 +185,15 @@ contract AuctionFulfillment is
             0,
             startPrice,
             reservedPrice,
+            collectionId,
+            _tokenUri,
             block.timestamp,
             _nextItemId(),
             0,
             _fundingRecipient,
             0,
             0,
-            payable(address(0)),
+            (address(0)),
             0,
             mul_duration,
             AuctionStatus.ACTIVE
@@ -208,6 +213,358 @@ contract AuctionFulfillment is
         );  
     }
 
+
+    // function listItemOnAuction(
+    //     uint256 collectionId,
+    //     string memory itemId,
+    //     address payable _fundingRecipient,
+    //     string memory _tokenUri,
+    //     address nftAddress,
+    //     uint256 tokenId,
+    //     uint256 startPrice,
+    //     uint256 reservedPrice,
+    //     uint256 _supply,
+    //     uint256 duration,
+    //     bool resell
+    // )
+    //     external
+    //     isValidated(_fundingRecipient,_supply)
+    //     // isActive(tokenId) 
+    //     /* Adjust enum, remove SOLDOUT, make all listed token ONSELL and everyoter free nft ACTIVE. TokenStatus mapped to nft address mapped to TokenId */
+    // {
+
+    //     require(
+    //         _fundingRecipient == msg.sender, 
+    //         "Only nft owner can sell nft"
+    //     );
+    //     require(
+    //         startPrice > 0,
+    //         "Starting price must be greater than zero"
+    //     );
+    //     require(
+    //         reservedPrice >= startPrice,
+    //         "reserved price should not be less than the starting price"
+    //     );
+    //     _currentItemIndex++;
+    //     emit itemIdPaired(itemId, _nextItemId());
+    //     s_itemIdDBToItemId[itemId] = _nextItemId();
+    //     Collection memory collection = s_collection[collectionId];
+    //     uint256 day = 1 days;
+    //     uint256 mul_duration = day.mul(duration);
+
+    //     if(resell){
+    //         if (nftAddress == address(this)){
+    //             s_listedTokens[nftAddress][tokenId] = ListedToken({
+    //                 nftAddress: nftAddress,
+    //                 itemId: 0,
+    //                 tokenId: tokenId,
+    //                 fundingRecipient: _fundingRecipient,
+    //                 price: startPrice,
+    //                 creator: collection.fundingRecipient,
+    //                 royaltyBPS: collection.creatorFee,
+    //                 collectionId: collectionId
+    //             });
+    //             _currentAuctionIndex++;
+    //             _idToAuction[_currentAuctionIndex] = Auction(
+    //                 _currentAuctionIndex,
+    //                 address(this),
+    //                 address(ERC20Token),
+    //                 _supply,
+    //                 0,
+    //                 startPrice,
+    //                 reservedPrice,
+    //                 collectionId,
+    //                 "",
+    //                 block.timestamp,
+    //                 _nextItemId(),
+    //                 tokenId,
+    //                 _fundingRecipient,
+    //                 0,
+    //                 0,
+    //                 (address(0)),
+    //                 0,
+    //                 mul_duration,
+    //                 AuctionStatus.ACTIVE
+    //             );
+
+    //                 emit TokenListed
+    //             (
+    //                 nftAddress, 
+    //                 tokenId, 
+    //                 0, 
+    //                 msg.sender, 
+    //                 startPrice,
+    //                 collection.fundingRecipient,
+    //                 collection.creatorFee, 
+    //                 block.timestamp,
+    //                 collectionId
+    //             );
+    //         }else{
+    //             s_listedTokens[nftAddress][tokenId] = ListedToken({
+    //                 nftAddress: nftAddress,
+    //                 itemId: 0,
+    //                 tokenId: tokenId,
+    //                 fundingRecipient: _fundingRecipient,
+    //                 price: startPrice,
+    //                 creator: address(0),
+    //                 royaltyBPS: 0,
+    //                 collectionId: 0
+    //             });
+
+    //             _currentAuctionIndex++;
+    //             _idToAuction[_currentAuctionIndex] = Auction(
+    //                 _currentAuctionIndex,
+    //                 nftAddress,
+    //                 address(ERC20Token),
+    //                 _supply,
+    //                 0,
+    //                 startPrice,
+    //                 reservedPrice,
+    //                 collectionId,
+    //                 "",
+    //                 block.timestamp,
+    //                 _nextItemId(),
+    //                 tokenId,
+    //                 _fundingRecipient,
+    //                 0,
+    //                 0,
+    //                 (address(0)),
+    //                 0,
+    //                 mul_duration,
+    //                 AuctionStatus.ACTIVE
+    //             );
+    //             emit TokenListed
+    //             (
+    //                 nftAddress, 
+    //                 tokenId, 
+    //                 0, 
+    //                 msg.sender, 
+    //                 startPrice,
+    //                 collection.fundingRecipient,
+    //                 collection.creatorFee, 
+    //                 block.timestamp,
+    //                 collectionId
+    //             );
+    //         }     
+    //     }else{
+
+    //         s_listedItems[address(this)][_nextItemId()] = ListedItem({
+    //             nftAddress: address(this),
+    //             numSold: 0,
+    //             royaltyBPS: collection.creatorFee,
+    //             fundingRecipient: payable(_fundingRecipient),
+    //             supply: _supply,
+    //             price: startPrice,
+    //             itemId: _nextItemId(),
+    //             collectionId: collectionId
+    //         });
+
+    //         emit ItemCreated(
+    //             address(this),
+    //             _nextItemId(),
+    //             itemId,
+    //             _fundingRecipient,
+    //             startPrice,
+    //             _supply,
+    //             collection.creatorFee,
+    //             block.timestamp
+    //         );
+
+    //         // address owner = NFT.ownerOf(tokenId);
+    //         // NFT.safeTransferFrom(owner, address(this), tokenId);
+
+    //         // _idToItemStatus[tokenId] = TokenStatus.ONAUCTION;
+    //         _currentAuctionIndex++;
+    //         _idToAuction[_currentAuctionIndex] = Auction(
+    //             _currentAuctionIndex,
+    //             address(this),
+    //             address(ERC20Token),
+    //             _supply,
+    //             0,
+    //             startPrice,
+    //             reservedPrice,
+    //             collectionId,
+    //             _tokenUri,
+    //             block.timestamp,
+    //             _nextItemId(),
+    //             0,
+    //             _fundingRecipient,
+    //             0,
+    //             0,
+    //             (address(0)),
+    //             0,
+    //             mul_duration,
+    //             AuctionStatus.ACTIVE
+    //         );  
+    //     }
+
+    //     emit StartAuction(
+    //         _nextAuctionId(), 
+    //         address(this), 
+    //         address(ERC20Token), 
+    //         _supply,
+    //         _nextItemId(),
+    //         msg.sender,
+    //         startPrice,
+    //         reservedPrice,
+    //         block.timestamp,
+    //         mul_duration
+    //     );  
+    // }
+
+
+    // function listItemOnAuctionResell(
+    //     uint256 collectionId,
+    //     string memory itemId,
+    //     address payable _fundingRecipient,
+    //     address nftAddress,
+    //     uint256 tokenId,
+    //     uint256 startPrice,
+    //     uint256 reservedPrice,
+    //     uint256 _supply,
+    //     uint256 duration
+    //     )
+    //     external
+    //     isValidated(_fundingRecipient,_supply)
+    //     // isActive(tokenId) 
+    //     /* Adjust enum, remove SOLDOUT, make all listed token ONSELL and everyoter free nft ACTIVE. TokenStatus mapped to nft address mapped to TokenId */
+    // {
+
+    //     require(
+    //         _fundingRecipient == msg.sender, 
+    //         "Only nft owner can sell nft"
+    //     );
+    //     require(
+    //         startPrice > 0,
+    //         "Starting price must be greater than zero"
+    //     );
+    //     require(
+    //         reservedPrice >= startPrice,
+    //         "reserved price should not be less than the starting price"
+    //     );
+    //     _currentItemIndex++;
+    //     emit itemIdPaired(itemId, _nextItemId());
+    //     s_itemIdDBToItemId[itemId] = _nextItemId();
+    //     Collection memory collection = s_collection[collectionId];
+    //     uint256 day = 1 days;
+    //     uint256 mul_duration = day.mul(duration);
+
+    //    if (nftAddress == address(this)){
+    //         s_listedTokens[nftAddress][tokenId] = ListedToken({
+    //             nftAddress: nftAddress,
+    //             itemId: 0,
+    //             tokenId: tokenId,
+    //             fundingRecipient: _fundingRecipient,
+    //             price: startPrice,
+    //             creator: collection.fundingRecipient,
+    //             royaltyBPS: collection.creatorFee,
+    //             collectionId: collectionId
+    //         });
+
+    //         _idToAuction[_currentAuctionIndex] = Auction(
+    //             _currentAuctionIndex,
+    //             address(this),
+    //             address(ERC20Token),
+    //             _supply,
+    //             0,
+    //             startPrice,
+    //             reservedPrice,
+    //             collectionId,
+    //             "",
+    //             block.timestamp,
+    //             _nextItemId(),
+    //             tokenId,
+    //             _fundingRecipient,
+    //             0,
+    //             0,
+    //             payable(address(0)),
+    //             0,
+    //             mul_duration,
+    //             AuctionStatus.ACTIVE
+    //         );
+
+    //             emit TokenListed
+    //         (
+    //             nftAddress, 
+    //             tokenId, 
+    //             0, 
+    //             msg.sender, 
+    //             startPrice,
+    //             collection.fundingRecipient,
+    //             collection.creatorFee, 
+    //             block.timestamp,
+    //             collectionId
+    //         );
+    //     }else{
+    //         s_listedTokens[nftAddress][tokenId] = ListedToken({
+    //         nftAddress: nftAddress,
+    //         itemId: 0,
+    //         tokenId: tokenId,
+    //         fundingRecipient: _fundingRecipient,
+    //         price: startPrice,
+    //         creator: address(0),
+    //         royaltyBPS: 0,
+    //         collectionId: 0
+    //     });
+    //         emit TokenListed
+    //         (
+    //             nftAddress, 
+    //             tokenId, 
+    //             0, 
+    //             msg.sender, 
+    //             startPrice,
+    //             collection.fundingRecipient,
+    //             collection.creatorFee, 
+    //             block.timestamp,
+    //             collectionId
+    //         );
+    //     }
+
+        
+
+    //     // address owner = NFT.ownerOf(tokenId);
+    //     // NFT.safeTransferFrom(owner, address(this), tokenId);
+
+       
+
+    //     // _idToItemStatus[tokenId] = TokenStatus.ONAUCTION;
+    //     _currentAuctionIndex++;
+    //     _idToAuction[_currentAuctionIndex] = Auction(
+    //         _currentAuctionIndex,
+    //         address(this),
+    //         address(ERC20Token),
+    //         _supply,
+    //         0,
+    //         startPrice,
+    //         reservedPrice,
+    //         collectionId,
+    //         "",
+    //         block.timestamp,
+    //         _nextItemId(),
+    //         tokenId,
+    //         _fundingRecipient,
+    //         0,
+    //         0,
+    //         payable(address(0)),
+    //         0,
+    //         mul_duration,
+    //         AuctionStatus.ACTIVE
+    //     );  
+
+    //     emit StartAuction(
+    //         _nextAuctionId(), 
+    //         address(this), 
+    //         address(ERC20Token), 
+    //         _supply,
+    //         _nextItemId(),
+    //         msg.sender,
+    //         startPrice,
+    //         reservedPrice,
+    //         block.timestamp,
+    //         mul_duration
+    //     );  
+    // }
+
     function makeBid(uint256 quantity, uint256 price, uint256 auctionId)
         external
         AuctionIsActive(auctionId)
@@ -225,13 +582,23 @@ contract AuctionFulfillment is
         );
 
         if (order.startPrice != 0) {
-            ERC20Token.transfer(order.lastBidder, order.currentBidPrice);
+            if(ERC20Token.transfer(order.lastBidder, order.currentBidPrice) == !true){
+                revert TransferNotCompleted({
+                    senderBalance: ERC20Token.balanceOf(order.lastBidder),
+                    fundTosend: order.currentBidPrice
+                });
+            }     
         }
 
-        ERC20Token.transferFrom(msg.sender, address(this), price);
+        if(ERC20Token.transferFrom(msg.sender, address(this), price) == !true){
+            revert TransferNotCompleted({
+                senderBalance: ERC20Token.balanceOf(msg.sender),
+                fundTosend: price
+            });
+        }
 
         order.currentBidPrice = price;
-        order.lastBidder = payable(msg.sender);
+        order.lastBidder = msg.sender;
         order.bidAmount += 1;
         order.quantity = quantity;
         _idToAuction[auctionId] = order;
@@ -266,8 +633,41 @@ contract AuctionFulfillment is
             return;
         }
 
+        Collection memory collection = s_collection[order.collectionId];
+
+        // order.itemBaseURI
+
         // NFT.safeTransferFrom(address(this), order.lastBidder, tokenId);
-        ERC20Token.transfer(order.owner, order.currentBidPrice);
+
+        //Deduct the service fee
+        uint256 serviceFee = order.currentBidPrice.mul(SERVICE_FEE).div(100);
+        uint256 royalty = order.currentBidPrice.mul(collection.creatorFee).div(100);
+        uint256 finalAmount = order.currentBidPrice.sub(serviceFee.add(royalty));
+
+
+        // Adding the newly earned money to the total amount a user has earned from an Item.
+        s_depositedForItem[_nextItemId()] += finalAmount; // optmize
+        s_platformEarning += serviceFee;
+        s_indivivdualEarningInPlatform[order.owner] += finalAmount;
+        s_indivivdualEarningInPlatform[collection.fundingRecipient] += royalty;
+        s_totalAmount += finalAmount;
+
+        if(ERC20Token.transfer(order.owner, finalAmount) == !true){
+            revert TransferNotCompleted({
+                senderBalance: ERC20Token.balanceOf(order.owner),
+                fundTosend: order.currentBidPrice
+            });
+        }
+
+        if(ERC20Token.transfer(collection.fundingRecipient, royalty) == !true){
+            revert TransferNotCompleted({
+                senderBalance: ERC20Token.balanceOf(address(this)),
+                fundTosend: royalty
+            });
+        }
+
+        // Mint a new copy or token from the Item for the buyer
+         safeMint(1, order.itemBaseURI, _nextItemId()); 
 
         order.status = AuctionStatus.SUCCESSFUL_ENDED;
         // _idToItemStatus[tokenId] = TokenStatus.ACTIVE;
@@ -285,6 +685,86 @@ contract AuctionFulfillment is
             order.lastBidder
         );
     }
+
+    // function finishAuctionResell(uint256 auctionId)
+    //     external
+    //     AuctionIsActive(auctionId)
+    //     nonReentrant
+    // {
+    //     Auction memory order = _idToAuction[auctionId];
+
+    //     require(
+    //         order.startTime + order.duration < _currentTime(),
+    //         "Auction duration not completed!"
+    //     );
+
+    //     if (order.reservedPrice > order.currentBidPrice) {
+    //         _cancelAuction(auctionId);
+    //         emit NegativeEndAuction(
+    //             auctionId, 
+    //             order.addressNFTCollection,
+    //             order.owner,
+    //             order.quantity,
+    //             order.reservedPrice,
+    //             order.currentBidPrice,
+    //             order.bidAmount,
+    //             block.timestamp
+    //             );
+    //         return;
+    //     }
+
+    //     Collection memory collection = s_collection[order.collectionId];
+
+    //     // order.itemBaseURI
+
+    //     // NFT.safeTransferFrom(address(this), order.lastBidder, tokenId);
+
+    //     //Deduct the service fee
+    //     uint256 serviceFee = order.currentBidPrice.mul(SERVICE_FEE).div(100);
+    //     uint256 royalty = order.currentBidPrice.mul(collection.creatorFee).div(100);
+    //     uint256 finalAmount = order.currentBidPrice.sub(serviceFee.add(royalty));
+
+
+    //     // Adding the newly earned money to the total amount a user has earned from an Item.
+    //     s_depositedForItem[_nextItemId()] += finalAmount; // optmize
+    //     s_platformEarning += serviceFee;
+    //     s_indivivdualEarningInPlatform[order.owner] += finalAmount;
+    //     s_indivivdualEarningInPlatform[collection.fundingRecipient] += royalty;
+    //     s_totalAmount += finalAmount;
+
+    //     if(ERC20Token.transfer(order.owner, order.currentBidPrice) == !true){
+    //         revert TransferNotCompleted({
+    //             senderBalance: ERC20Token.balanceOf(order.owner),
+    //             fundTosend: order.currentBidPrice
+    //         });
+    //     }
+
+    //     if(ERC20Token.transfer(collection.fundingRecipient, royalty) == !true){
+    //         revert TransferNotCompleted({
+    //             senderBalance: ERC20Token.balanceOf(address(this)),
+    //             fundTosend: royalty
+    //         });
+    //     }
+
+    //     // Mint a new copy or token from the Item for the buyer
+    //      safeMint(1, order.itemBaseURI, _nextItemId()); 
+
+    //     order.status = AuctionStatus.SUCCESSFUL_ENDED;
+    //     // _idToItemStatus[tokenId] = TokenStatus.ACTIVE;
+
+    //     // _itemsSold.increment();
+    //     emit PositiveEndAuction(
+    //         auctionId,
+    //         order.addressNFTCollection,
+    //         order.quantity,
+    //         order.reservedPrice,
+    //         order.currentBidPrice,
+    //         order.bidAmount,
+    //         block.timestamp,
+    //         order.owner,
+    //         order.lastBidder
+    //     );
+    // }
 
     function _cancelAuction(uint256 auctionId) private {
         _idToAuction[auctionId].status = AuctionStatus.UNSUCCESSFULLY_ENDED;
@@ -317,5 +797,4 @@ contract AuctionFulfillment is
         emit EventCanceled(auctionId, msg.sender);
     }
     
-   
 }
