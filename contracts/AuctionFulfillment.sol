@@ -4,14 +4,10 @@ pragma solidity ^0.8.9;
 
 import "./CloudaxMarketplace.sol";
 
-
-contract AuctionFulfillment is
-    CloudaxMarketplace
-{
-
+contract AuctionFulfillment is CloudaxMarketplace {
     using SafeMath for uint256;
 
-     // Structure to define auction properties
+    // Structure to define auction properties
     struct Auction {
         uint256 index; // Auction Index
         address addressNFTCollection; // Address of the ERC721 NFT Collection contract
@@ -32,7 +28,7 @@ contract AuctionFulfillment is
         AuctionStatus status;
     }
 
-        // mapping of auctionId to Auction struct
+    // mapping of auctionId to Auction struct
     mapping(uint256 => Auction) internal _idToAuction;
 
     event StartAuction(
@@ -55,7 +51,7 @@ contract AuctionFulfillment is
         address indexed bidder
     );
 
-     event NegativeEndAuction(
+    event NegativeEndAuction(
         uint256 indexed auctionId,
         address indexed nftAddress,
         address seller,
@@ -80,7 +76,7 @@ contract AuctionFulfillment is
 
     event EventCanceled(uint256 indexed auctionId, address indexed seller);
 
-     enum AuctionStatus {
+    enum AuctionStatus {
         DEFAULT,
         ACTIVE,
         SUCCESSFUL_ENDED,
@@ -89,7 +85,7 @@ contract AuctionFulfillment is
 
     constructor() {}
 
-     modifier AuctionIsActive(uint256 auctionId) {
+    modifier AuctionIsActive(uint256 auctionId) {
         require(
             _idToAuction[auctionId].status == AuctionStatus.ACTIVE,
             "Auction already ended!"
@@ -112,7 +108,6 @@ contract AuctionFulfillment is
         return _currentAuctionIndex;
     }
 
-
     function listItemOnAuction(
         uint256 collectionId,
         string memory itemId,
@@ -121,21 +116,11 @@ contract AuctionFulfillment is
         uint256 reservedPrice,
         uint256 _supply,
         uint256 duration
-        )
-        external
-        isValidated(_fundingRecipient,_supply)
-        // isActive(tokenId) 
-        /* Adjust enum, remove SOLDOUT, make all listed token ONSELL and everyoter free nft ACTIVE. TokenStatus mapped to nft address mapped to TokenId */
+    ) external isValidated(_fundingRecipient, _supply) // isActive(tokenId)
+    /* Adjust enum, remove SOLDOUT, make all listed token ONSELL and everyoter free nft ACTIVE. TokenStatus mapped to nft address mapped to TokenId */
     {
-
-        require(
-            _fundingRecipient == msg.sender, 
-            "Only nft owner can sell nft"
-        );
-        require(
-            startPrice > 0,
-            "Starting price must be greater than zero"
-        );
+        require(_fundingRecipient == msg.sender, "Only nft owner can sell nft");
+        require(startPrice > 0, "Starting price must be greater than zero");
         require(
             reservedPrice >= startPrice,
             "reserved price should not be less than the starting price"
@@ -192,12 +177,12 @@ contract AuctionFulfillment is
             0,
             mul_duration,
             AuctionStatus.ACTIVE
-        );  
+        );
 
         emit StartAuction(
-            _nextAuctionId(), 
-            address(this), 
-            address(ERC20Token), 
+            _nextAuctionId(),
+            address(this),
+            address(ERC20Token),
             _supply,
             _nextItemId(),
             msg.sender,
@@ -205,13 +190,14 @@ contract AuctionFulfillment is
             reservedPrice,
             block.timestamp,
             mul_duration
-        );  
+        );
     }
 
-    function makeBid(uint256 quantity, uint256 price, uint256 auctionId)
-        external
-        AuctionIsActive(auctionId)
-    {
+    function makeBid(
+        uint256 quantity,
+        uint256 price,
+        uint256 auctionId
+    ) external AuctionIsActive(auctionId) {
         Auction memory order = _idToAuction[auctionId];
 
         require(
@@ -220,7 +206,7 @@ contract AuctionFulfillment is
         );
 
         require(
-            quantity <= order.supply, 
+            quantity <= order.supply,
             "Not enough NFT listed for this auction"
         );
 
@@ -239,11 +225,9 @@ contract AuctionFulfillment is
         emit BidIsMade(auctionId, price, order.bidAmount, order.lastBidder);
     }
 
-    function finishAuction(uint256 auctionId)
-        external
-        AuctionIsActive(auctionId)
-        nonReentrant
-    {
+    function finishAuction(
+        uint256 auctionId
+    ) external AuctionIsActive(auctionId) nonReentrant {
         Auction memory order = _idToAuction[auctionId];
 
         require(
@@ -254,7 +238,7 @@ contract AuctionFulfillment is
         if (order.reservedPrice > order.currentBidPrice) {
             _cancelAuction(auctionId);
             emit NegativeEndAuction(
-                auctionId, 
+                auctionId,
                 order.addressNFTCollection,
                 order.owner,
                 order.quantity,
@@ -262,7 +246,7 @@ contract AuctionFulfillment is
                 order.currentBidPrice,
                 order.bidAmount,
                 block.timestamp
-                );
+            );
             return;
         }
 
@@ -316,6 +300,4 @@ contract AuctionFulfillment is
         _cancelAuction(auctionId);
         emit EventCanceled(auctionId, msg.sender);
     }
-    
-   
 }
