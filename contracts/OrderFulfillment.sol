@@ -63,7 +63,7 @@ contract OrderFulfillment is CloudaxMarketplace {
         uint256 offerCount,
         uint256 offerPrice,
         address winnigOfferAddress
-    ) public payable nonReentrant isValidated(_fundingRecipient, _supply) {
+    ) external payable nonReentrant isValidated(_fundingRecipient, _supply) {
         // uint256 id = s_itemIdDBToItemId[itemId];
         require(_qty >= 1, "Must buy atleast one nft");
         require(
@@ -338,3 +338,4 @@ contract OrderFulfillment is CloudaxMarketplace {
 
     // }
 }
+ 

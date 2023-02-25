@@ -1,13 +1,20 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.9;
-// pragma solidity >=0.8.4 <0.9.0;
 
-import "./CloudaxMarketplace.sol";
+import "./CloudaxShared.sol";
 
-contract AuctionFulfillment is CloudaxMarketplace {
+
+contract AuctionFulfillment is
+    CloudaxShared
+{
+
     using SafeMath for uint256;
 
-    // Structure to define auction properties
+// -----------------------------------VARIABLES-----------------------------------
+    // Auction index count
+    uint256 internal _currentAuctionIndex;
+
+     // Structure to define auction properties
     struct Auction {
         uint256 index; // Auction Index
         address addressNFTCollection; // Address of the ERC721 NFT Collection contract
@@ -16,10 +23,12 @@ contract AuctionFulfillment is CloudaxMarketplace {
         uint256 quantity;
         uint256 startPrice;
         uint256 reservedPrice;
+        uint256 collectionId;
+        string itemBaseURI;
         uint256 startTime;
         uint256 itemId; // NFT Id
         uint256 tokenId; // tokenId
-        address owner; // Creator of the Auction
+        address payable owner; // Creator of the Auction
         uint256 currentBidPrice; // Current highest bid for the auction
         uint256 endAuction; // Timestamp for the end day&time of the auction
         address payable lastBidder;
@@ -28,8 +37,9 @@ contract AuctionFulfillment is CloudaxMarketplace {
         AuctionStatus status;
     }
 
-    // mapping of auctionId to Auction struct
     mapping(uint256 => Auction) internal _idToAuction;
+    //Mapping of items to a ListedItem struct
+    
 
     event StartAuction(
         uint256 indexed index, // Auction Index
@@ -51,7 +61,7 @@ contract AuctionFulfillment is CloudaxMarketplace {
         address indexed bidder
     );
 
-    event NegativeEndAuction(
+     event NegativeEndAuction(
         uint256 indexed auctionId,
         address indexed nftAddress,
         address seller,
@@ -76,7 +86,7 @@ contract AuctionFulfillment is CloudaxMarketplace {
 
     event EventCanceled(uint256 indexed auctionId, address indexed seller);
 
-    enum AuctionStatus {
+     enum AuctionStatus {
         DEFAULT,
         ACTIVE,
         SUCCESSFUL_ENDED,
@@ -85,7 +95,7 @@ contract AuctionFulfillment is CloudaxMarketplace {
 
     constructor() {}
 
-    modifier AuctionIsActive(uint256 auctionId) {
+     modifier AuctionIsActive(uint256 auctionId) {
         require(
             _idToAuction[auctionId].status == AuctionStatus.ACTIVE,
             "Auction already ended!"
@@ -108,19 +118,30 @@ contract AuctionFulfillment is CloudaxMarketplace {
         return _currentAuctionIndex;
     }
 
+
     function listItemOnAuction(
         uint256 collectionId,
         string memory itemId,
         address payable _fundingRecipient,
+        string memory _tokenUri,
         uint256 startPrice,
         uint256 reservedPrice,
         uint256 _supply,
         uint256 duration
-    ) external isValidated(_fundingRecipient, _supply) // isActive(tokenId)
-    /* Adjust enum, remove SOLDOUT, make all listed token ONSELL and everyoter free nft ACTIVE. TokenStatus mapped to nft address mapped to TokenId */
+        )
+        external
+        isValidated(_fundingRecipient,_supply)
+        /* Adjust enum, remove SOLDOUT, make all listed token ONSELL and everyoter free nft ACTIVE. TokenStatus mapped to nft address mapped to TokenId */
     {
-        require(_fundingRecipient == msg.sender, "Only nft owner can sell nft");
-        require(startPrice > 0, "Starting price must be greater than zero");
+
+        require(
+            _fundingRecipient == msg.sender, 
+            "Only nft owner can sell nft"
+        );
+        require(
+            startPrice > 0,
+            "Starting price must be greater than zero"
+        );
         require(
             reservedPrice >= startPrice,
             "reserved price should not be less than the starting price"
@@ -129,35 +150,31 @@ contract AuctionFulfillment is CloudaxMarketplace {
         emit itemIdPaired(itemId, _nextItemId());
         s_itemIdDBToItemId[itemId] = _nextItemId();
         Collection memory collection = s_collection[collectionId];
-        s_listedItems[address(this)][_nextItemId()] = ListedItem({
-            nftAddress: address(this),
-            numSold: 0,
-            royaltyBPS: collection.creatorFee,
-            fundingRecipient: _fundingRecipient,
-            supply: _supply,
-            price: startPrice,
-            itemId: _nextItemId(),
-            collectionId: collectionId
-        });
+        // s_listedItems[address(this)][_nextItemId()] = ListedItem({
+        //     nftAddress: address(this),
+        //     numSold: 0,
+        //     royaltyBPS: collection.creatorFee,
+        //     fundingRecipient: _fundingRecipient,
+        //     supply: _supply,
+        //     price: startPrice,
+        //     itemId: _nextItemId(),
+        //     collectionId: collectionId
+        // });
 
-        emit ItemCreated(
-            address(this),
-            _nextItemId(),
-            itemId,
-            _fundingRecipient,
-            startPrice,
-            _supply,
-            collection.creatorFee,
-            block.timestamp
-        );
-
-        // address owner = NFT.ownerOf(tokenId);
-        // NFT.safeTransferFrom(owner, address(this), tokenId);
+        // emit ItemCreated(
+        //     address(this),
+        //     _nextItemId(),
+        //     itemId,
+        //     _fundingRecipient,
+        //     startPrice,
+        //     _supply,
+        //     collection.creatorFee,
+        //     block.timestamp
+        // );
 
         uint256 day = 1 days;
         uint256 mul_duration = day.mul(duration);
 
-        // _idToItemStatus[tokenId] = TokenStatus.ONAUCTION;
         _currentAuctionIndex++;
         _idToAuction[_currentAuctionIndex] = Auction(
             _currentAuctionIndex,
@@ -167,6 +184,8 @@ contract AuctionFulfillment is CloudaxMarketplace {
             0,
             startPrice,
             reservedPrice,
+            collectionId,
+            _tokenUri,
             block.timestamp,
             _nextItemId(),
             0,
@@ -177,12 +196,13 @@ contract AuctionFulfillment is CloudaxMarketplace {
             0,
             mul_duration,
             AuctionStatus.ACTIVE
-        );
+        );  
+
 
         emit StartAuction(
-            _nextAuctionId(),
-            address(this),
-            address(ERC20Token),
+            _nextAuctionId(), 
+            address(this), 
+            address(ERC20Token), 
             _supply,
             _nextItemId(),
             msg.sender,
@@ -190,14 +210,14 @@ contract AuctionFulfillment is CloudaxMarketplace {
             reservedPrice,
             block.timestamp,
             mul_duration
-        );
+        );  
     }
 
-    function makeBid(
-        uint256 quantity,
-        uint256 price,
-        uint256 auctionId
-    ) external AuctionIsActive(auctionId) {
+    function makeBid(uint256 quantity, uint256 price, uint256 auctionId)
+        payable
+        external
+        AuctionIsActive(auctionId)
+    {
         Auction memory order = _idToAuction[auctionId];
 
         require(
@@ -206,15 +226,17 @@ contract AuctionFulfillment is CloudaxMarketplace {
         );
 
         require(
-            quantity <= order.supply,
+            msg.value >= price, "Not enough funds"
+        );
+
+        require(
+            quantity <= order.supply, 
             "Not enough NFT listed for this auction"
         );
 
-        if (order.startPrice != 0) {
-            ERC20Token.transfer(order.lastBidder, order.currentBidPrice);
+        if (order.bidAmount != 0) {
+            _sendFunds(order.lastBidder, order.currentBidPrice);
         }
-
-        ERC20Token.transferFrom(msg.sender, address(this), price);
 
         order.currentBidPrice = price;
         order.lastBidder = payable(msg.sender);
@@ -225,20 +247,25 @@ contract AuctionFulfillment is CloudaxMarketplace {
         emit BidIsMade(auctionId, price, order.bidAmount, order.lastBidder);
     }
 
-    function finishAuction(
-        uint256 auctionId
-    ) external AuctionIsActive(auctionId) nonReentrant {
+    
+
+    function finishAuction(uint256 auctionId)
+        payable
+        external
+        AuctionIsActive(auctionId)
+        nonReentrant
+    {
         Auction memory order = _idToAuction[auctionId];
 
         require(
-            order.startTime + order.duration < _currentTime(),
+            order.startTime + order.duration < block.timestamp,
             "Auction duration not completed!"
         );
 
         if (order.reservedPrice > order.currentBidPrice) {
             _cancelAuction(auctionId);
             emit NegativeEndAuction(
-                auctionId,
+                auctionId, 
                 order.addressNFTCollection,
                 order.owner,
                 order.quantity,
@@ -246,17 +273,24 @@ contract AuctionFulfillment is CloudaxMarketplace {
                 order.currentBidPrice,
                 order.bidAmount,
                 block.timestamp
-            );
+                );
             return;
         }
+        Collection memory collection = s_collection[order.collectionId];
 
-        // NFT.safeTransferFrom(address(this), order.lastBidder, tokenId);
-        ERC20Token.transfer(order.owner, order.currentBidPrice);
+        //Deduct the service fee
+        uint256 serviceFee = order.currentBidPrice.mul(SERVICE_FEE).div(100);
+        uint256 royalty = order.currentBidPrice.mul(collection.creatorFee).div(100);
+        uint256 finalAmount = order.currentBidPrice.sub(serviceFee.add(royalty));
 
+  
+        s_platformEarning += serviceFee;
+        s_totalAmount += finalAmount;
+        _sendFunds(order.owner, finalAmount);
+        _sendFunds(collection.fundingRecipient, royalty);
+        // safeMintOut(1, order.itemBaseURI, _nextItemId(), order.lastBidder); 
         order.status = AuctionStatus.SUCCESSFUL_ENDED;
-        // _idToItemStatus[tokenId] = TokenStatus.ACTIVE;
 
-        // _itemsSold.increment();
         emit PositiveEndAuction(
             auctionId,
             order.addressNFTCollection,
@@ -271,20 +305,13 @@ contract AuctionFulfillment is CloudaxMarketplace {
     }
 
     function _cancelAuction(uint256 auctionId) private {
+        require(
+            _idToAuction[auctionId].status == AuctionStatus.ACTIVE,
+            "Auction does not exist"
+        );
         _idToAuction[auctionId].status = AuctionStatus.UNSUCCESSFULLY_ENDED;
-
-        // NFT.safeTransferFrom(
-        //     address(this),
-        //     _idToAuctionOrder[tokenId].owner,
-        //     tokenId
-        // );
-        // _idToItemStatus[tokenId] = TokenStatus.ACTIVE;
-
         if (_idToAuction[auctionId].bidAmount != 0) {
-            ERC20Token.transfer(
-                _idToAuction[auctionId].lastBidder,
-                _idToAuction[auctionId].currentBidPrice
-            );
+            _sendFunds(_idToAuction[auctionId].lastBidder, _idToAuction[auctionId].currentBidPrice);
         }
     }
 
@@ -300,4 +327,9 @@ contract AuctionFulfillment is CloudaxMarketplace {
         _cancelAuction(auctionId);
         emit EventCanceled(auctionId, msg.sender);
     }
+
+    function getAuction(uint256 auctionId) public view returns (Auction memory){
+        return _idToAuction[auctionId];
+    } 
+   
 }
