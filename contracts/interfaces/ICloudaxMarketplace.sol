@@ -16,7 +16,7 @@ interface ICloudaxMarketplace {
         uint256 _price,
         uint256 _qty,
         uint256 _supply
-    ) external;
+    ) external payable;
 
     function listToken(
         address nftAddress,
@@ -48,7 +48,7 @@ interface ICloudaxMarketplace {
 
     function deleteCollection(uint256 collectionId) external; 
 
-    function buyNft(address nftAddress, uint256 tokenId) external;
+    function buyNft(address nftAddress, uint256 tokenId) external payable;
 
     function withdrawEarnings() external;
     

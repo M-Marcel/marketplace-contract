@@ -2,6 +2,7 @@
 pragma solidity ^0.8.9;
 
 import "./CloudaxShared.sol";
+import "./interfaces/ICloudaxMarketplace.sol";
 
 ////Custom Errors
 error NoProceeds();
@@ -18,7 +19,8 @@ error InsufficientFund(uint256 price, uint256 allowedFund);
 
 
 contract CloudaxMarketplace is
-    CloudaxShared
+    CloudaxShared,
+    ICloudaxMarketplace
 {
     using SafeMath for uint256;
 
