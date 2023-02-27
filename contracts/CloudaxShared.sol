@@ -14,6 +14,13 @@ error QuantityRequired(uint256 supply, uint256 minRequired);
 error InvalidAddress();
 error CannotSendFund(uint256 senderBalance, uint256 fundTosend);
 error CannotSendZero(uint256 fundTosend);
+error InvalidItemId(uint256 itemId);
+error ItemSoldOut(uint256 supply, uint256 numSold);
+error NotEnoughNft(uint256 supply, uint256 numSold, uint256 purchaseQuantityRequest);
+error InsufficientFund(uint256 price, uint256 allowedFund);
+error TransferFailed();
+error NotOwner();
+error PriceMustBeAboveZero();
 
 
 contract CloudaxShared is
@@ -34,6 +41,7 @@ contract CloudaxShared is
     uint256 internal constant auction = 2;
     uint256 internal s_platformEarning;
     uint256 internal s_totalAmount;
+    
 
     // ================================
     // STRUCTS
@@ -43,6 +51,32 @@ contract CloudaxShared is
         uint256 creatorFee;
         address owner;
     }
+
+        // structs for an item to be listed
+    struct ListedItem {
+        address nftAddress;
+        uint256 numSold;
+        uint256 royaltyBPS;
+        address payable fundingRecipient;
+        uint256 supply; 
+        uint256 price;
+        uint256 itemId;
+        uint256 collectionId;   
+    }
+
+     // structs for an item to be listed
+    struct ListedToken {
+        address nftAddress;
+        uint256 royaltyBPS;
+        address payable fundingRecipient;
+        uint256 price;
+        address creator;
+        uint256 itemId;
+        uint256 tokenId; 
+        uint256 collectionId;  
+    }
+
+    
 
     // webapp itemId(db objectId) to mapping of smart-contract itemId (uint)
     mapping(string => uint256) public s_itemIdDBToItemId;
@@ -55,6 +89,11 @@ contract CloudaxShared is
 
     // mapping of collection to item to TokenId
     mapping(uint256 => mapping(uint256 => uint256)) public s_tokensToItemToCollection;
+
+    mapping(address => mapping(uint256 => ListedItem)) public s_listedItems;
+
+    //Mapping of items to a ListedItem struct
+    mapping(address => mapping(uint256 => ListedToken)) public s_listedTokens;
 
 
     // ================================
@@ -89,6 +128,31 @@ contract CloudaxShared is
         address indexed owner,
         uint256 time
     );
+
+    //Emitted when a Item is listed for sell
+    event TokenListed(
+        address indexed nftAddress,
+        uint256 indexed tokenId,
+        uint256 itemId,
+        address indexed owner,
+        uint256 price,
+        address creator,
+        uint256 creatorFee,
+        uint256 time,
+        uint256 collectionId
+    );
+
+    ///Emitted when a copy of an item is sold
+    event NftSold(
+        address nftAddress,
+        uint256 indexed soldItemCopyId,
+        uint256 indexed soldItemId,
+        address indexed buyer,
+        address seller,
+        string soldItemBaseURI,
+        uint256 amountEarned,
+        uint256 time
+    );
     
     event itemIdPaired(string indexed itemIdDB, uint256 indexed itemId);
 
@@ -113,6 +177,15 @@ contract CloudaxShared is
         _;
     }
 
+    modifier isOwner(address nftAddress, uint256 tokenId, address spender) {
+        ERC721A nft = ERC721A(nftAddress);
+        address owner = nft.ownerOf(tokenId);
+        if (spender != owner) {
+            revert NotOwner();
+        }
+        _;
+    }
+
     /**
      * @dev Returns the starting token ID.
      * To change the starting token ID, please override this function.
@@ -127,6 +200,7 @@ contract CloudaxShared is
     function _nextItemId() internal view virtual returns (uint256) {
         return _currentItemIndex;
     }
+    
 
     /**
      * @dev Returns the starting collection ID.
@@ -159,6 +233,86 @@ contract CloudaxShared is
     function getCollectionCreated() public view returns (uint256) {
         return _currentCollectionIndex;
     }
+
+        /// @notice Creates a new NFT item.
+    /// @param _fundingRecipient The account that will receive sales revenue.
+    /// @param _price The price at which each copy of NFT item or token from a NFT item will be sold, in ETH.
+    /// @param _supply The maximum number of NFT item's copy or tokens that can be sold.
+    function _createItem(
+        uint256 collectionId,
+        string memory itemId,
+        address payable _fundingRecipient,
+        uint256 _price,
+        uint256 _supply
+    ) internal isValidated(_fundingRecipient,_supply) {
+
+        _currentItemIndex++;
+        emit itemIdPaired(itemId, _nextItemId());
+        s_itemIdDBToItemId[itemId] = _nextItemId();
+        Collection memory collection = s_collection[collectionId];
+        s_listedItems[address(this)][_nextItemId()] = ListedItem({
+            nftAddress: address(this),
+            numSold: 0,
+            royaltyBPS: collection.creatorFee,
+            fundingRecipient: _fundingRecipient,
+            supply: _supply,
+            price: _price,
+            itemId: _nextItemId(),
+            collectionId: collectionId
+        });
+
+        emit ItemCreated(
+            address(this),
+            _nextItemId(),
+            itemId,
+            _fundingRecipient,
+            _price,
+            _supply,
+            collection.creatorFee,
+            block.timestamp
+        );
+
+
+    }
+
+    function safeMint(
+        uint256 _qty,
+        string memory _uri,
+        uint256 itemId
+    ) internal {
+        _safeMint(msg.sender, _qty);
+        uint256 end = _nextTokenId();
+        uint256 index = end - _qty;
+        ListedItem memory listing = s_listedItems[address(this)][itemId];
+        for (uint i = index; i < end; i++) {
+            string memory _tURI = string(
+                abi.encodePacked(_uri, "/", Strings.toString(i))
+            );
+            _setTokenURI(i, _tURI);
+            s_tokensToItemToCollection[i][listing.itemId] = listing.collectionId;
+        }
+        
+    }
+
+    function safeMintOut(
+        uint256 _qty,
+        string memory _uri,
+        uint256 itemId,
+        address recipient
+    ) internal {
+        _safeMint(recipient, _qty);
+        uint256 end = _nextTokenId();
+        uint256 index = end - _qty;
+        ListedItem memory listing = s_listedItems[address(this)][itemId]; // sub for 
+        for (uint i = index; i < end; i++) {
+            string memory _tURI = string(
+                abi.encodePacked(_uri, "/", Strings.toString(i))
+            );
+            _setTokenURI(i, _tURI);
+            s_tokensToItemToCollection[i][listing.itemId] = listing.collectionId;
+        }
+        
+    }  
 
     /// @notice Sends funds to an address
     /// @param _recipient The address to send funds to

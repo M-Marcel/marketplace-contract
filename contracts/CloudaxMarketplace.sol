@@ -6,17 +6,11 @@ import "./interfaces/ICloudaxMarketplace.sol";
 
 ////Custom Errors
 error NoProceeds();
-error TransferFailed();
-error NotOwner();
-error PriceMustBeAboveZero();
 error SupplyDoesNotExist(uint256 availableSupply);
-error InvalidItemId(uint256 itemId);
 error NotListed(uint256 tokenId);
-error ItemSoldOut(uint256 supply, uint256 numSold);
-error NotEnoughNft(uint256 supply, uint256 numSold, uint256 purchaseQuantityRequest);
-error InsufficientFund(uint256 price, uint256 allowedFund);
 
-
+//000000000000000000
+//www.cloudax.com/meta
 
 contract CloudaxMarketplace is
     CloudaxShared,
@@ -25,37 +19,8 @@ contract CloudaxMarketplace is
     using SafeMath for uint256;
 
 // -----------------------------------VARIABLES-----------------------------------
-    uint256 internal _currentOfferIndex;
-    string internal s_contractBaseURI;
-
-
     
-    // Added an additional counter, since _tokenIds can be reduced by burning.
-    // And intranal because the marketplace contract will display the total amount.
-
-    // structs for an item to be listed
-    struct ListedItem {
-        address nftAddress;
-        uint256 numSold;
-        uint256 royaltyBPS;
-        address payable fundingRecipient;
-        uint256 supply; 
-        uint256 price;
-        uint256 itemId;
-        uint256 collectionId;   
-    }
-
-     // structs for an item to be listed
-    struct ListedToken {
-        address nftAddress;
-        uint256 royaltyBPS;
-        address payable fundingRecipient;
-        uint256 price;
-        address creator;
-        uint256 itemId;
-        uint256 tokenId; 
-        uint256 collectionId;  
-    }
+    string internal s_contractBaseURI;
 
     struct SoldItem {
         address nftAddress;
@@ -69,14 +34,11 @@ contract CloudaxMarketplace is
         uint256 itemId;      
     }
 
+        mapping(address => mapping(uint256 => SoldItem)) public s_soldItems;
 
-    //Mapping of items to a ListedItem struct
-    mapping(address => mapping(uint256 => ListedToken)) public s_listedTokens;
-
-    //Mapping of items to a SoldItem struct
-    mapping(address => mapping(uint256 => SoldItem)) public s_soldItems;
-
-    mapping(address => mapping(uint256 => ListedItem)) public s_listedItems;
+    
+    // Added an additional counter, since _tokenIds can be reduced by burning.
+    // And intranal because the marketplace contract will display the total amount.
 
 
     ///Mapping an Item to the token copies minted from it.
@@ -95,18 +57,7 @@ contract CloudaxMarketplace is
     // ================================
     // EVENTS
     // ================================
-    //Emitted when a Item is listed for sell
-    event TokenListed(
-        address indexed nftAddress,
-        uint256 indexed tokenId,
-        uint256 itemId,
-        address indexed owner,
-        uint256 price,
-        address creator,
-        uint256 creatorFee,
-        uint256 time,
-        uint256 collectionId
-    );
+    
 
     //Emitted when a copy of an item is sold
     event ItemCopySold(
@@ -124,34 +75,12 @@ contract CloudaxMarketplace is
     );
 
 
-    ///Emitted when a copy of an item is sold
-    event NftSold(
-        address nftAddress,
-        uint256 indexed soldItemCopyId,
-        uint256 indexed soldItemId,
-        address indexed buyer,
-        address seller,
-        string soldItemBaseURI,
-        uint256 amountEarned,
-        uint256 time
-    );
-
     event ItemListingCanceled(address owner, uint256 tokenId, uint256 time);
 
 
     constructor() {
         _currentItemIndex = _startItemId();
         _currentCollectionIndex = _startCollectionId();
-    }
-
-
-    modifier isOwner(address nftAddress, uint256 tokenId, address spender) {
-        ERC721A nft = ERC721A(nftAddress);
-        address owner = nft.ownerOf(tokenId);
-        if (spender != owner) {
-            revert NotOwner();
-        }
-        _;
     }
 
     modifier isReady(uint256 collectionId,uint256 quantity){
@@ -191,47 +120,6 @@ contract CloudaxMarketplace is
     function setERC20Token(address newToken) external onlyOwner {
         emit ERC20AddressChanged(address(ERC20Token), newToken);
         ERC20Token = IERC20(newToken);
-    }
-
-    /// @notice Creates a new NFT item.
-    /// @param _fundingRecipient The account that will receive sales revenue.
-    /// @param _price The price at which each copy of NFT item or token from a NFT item will be sold, in ETH.
-    /// @param _supply The maximum number of NFT item's copy or tokens that can be sold.
-    function _createItem(
-        uint256 collectionId,
-        string memory itemId,
-        address payable _fundingRecipient,
-        uint256 _price,
-        uint256 _supply
-    ) internal isValidated(_fundingRecipient,_supply) {
-
-        _currentItemIndex++;
-        emit itemIdPaired(itemId, _nextItemId());
-        s_itemIdDBToItemId[itemId] = _nextItemId();
-        Collection memory collection = s_collection[collectionId];
-        s_listedItems[address(this)][_nextItemId()] = ListedItem({
-            nftAddress: address(this),
-            numSold: 0,
-            royaltyBPS: collection.creatorFee,
-            fundingRecipient: _fundingRecipient,
-            supply: _supply,
-            price: _price,
-            itemId: _nextItemId(),
-            collectionId: collectionId
-        });
-
-        emit ItemCreated(
-            address(this),
-            _nextItemId(),
-            itemId,
-            _fundingRecipient,
-            _price,
-            _supply,
-            collection.creatorFee,
-            block.timestamp
-        );
-
-
     }
 
     /// @notice Creates or mints a new copy or token for the given item, and assigns it to the buyer
@@ -579,45 +467,6 @@ contract CloudaxMarketplace is
    
 
     }
-    
-    function safeMint(
-        uint256 _qty,
-        string memory _uri,
-        uint256 itemId
-    ) internal {
-        _safeMint(msg.sender, _qty);
-        uint256 end = _nextTokenId();
-        uint256 index = end - _qty;
-        ListedItem memory listing = s_listedItems[address(this)][itemId];
-        for (uint i = index; i < end; i++) {
-            string memory _tURI = string(
-                abi.encodePacked(_uri, "/", Strings.toString(i))
-            );
-            _setTokenURI(i, _tURI);
-            s_tokensToItemToCollection[i][listing.itemId] = listing.collectionId;
-        }
-        
-    }
-
-    function safeMintOut(
-        uint256 _qty,
-        string memory _uri,
-        uint256 itemId,
-        address recipient
-    ) internal {
-        _safeMint(recipient, _qty);
-        uint256 end = _nextTokenId();
-        uint256 index = end - _qty;
-        ListedItem memory listing = s_listedItems[address(this)][itemId]; // sub for 
-        for (uint i = index; i < end; i++) {
-            string memory _tURI = string(
-                abi.encodePacked(_uri, "/", Strings.toString(i))
-            );
-            _setTokenURI(i, _tURI);
-            s_tokensToItemToCollection[i][listing.itemId] = listing.collectionId;
-        }
-        
-    }  
 
     /// @notice Returns token metadata URI (metadata URL). e.g. https://cloudaxnftmarketplace.xyz/metadata/[USER_ID]/[ITEM_ID]
     function tokenURI(uint256 _tokenId)

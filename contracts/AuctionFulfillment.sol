@@ -288,7 +288,7 @@ contract AuctionFulfillment is
         s_totalAmount += finalAmount;
         _sendFunds(order.owner, finalAmount);
         _sendFunds(collection.fundingRecipient, royalty);
-        // safeMintOut(1, order.itemBaseURI, _nextItemId(), order.lastBidder); 
+        safeMintOut(1, order.itemBaseURI, _nextItemId(), order.lastBidder); 
         order.status = AuctionStatus.SUCCESSFUL_ENDED;
 
         emit PositiveEndAuction(
