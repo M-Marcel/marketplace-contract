@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.9;
 
-// import "./CloudaxShared.sol";
+
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./interfaces/ICloudaxShared.sol";
@@ -360,9 +360,7 @@ contract AuctionFulfillment is
   
         cloudaxShared.addPlatformEarning(serviceFee);
         cloudaxShared.addTotalAmount(finalAmount);
-        // cloudaxShared.sendFunds(order.owner, finalAmount);
         cloudaxShared.getERC20Token().transfer(order.owner, finalAmount);
-        // cloudaxShared.sendFunds(collection.fundingRecipient, royalty);
         cloudaxShared.getERC20Token().transfer(collection.fundingRecipient, royalty);
         if(order.addressNFTCollection == address(this)){
             cloudaxShared.safeMintOut(1, order.itemBaseURI, cloudaxShared.nextItemId(), order.lastBidder); 
