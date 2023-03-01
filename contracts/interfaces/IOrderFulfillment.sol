@@ -2,6 +2,7 @@
 
 pragma solidity ^0.8.9;
 
+
 interface IOrderFulfillment {
     function fulfillOfferOrder(
         address payable _fundingRecipient,
@@ -13,5 +14,7 @@ interface IOrderFulfillment {
         uint256 offerCount,
         uint256 offerPrice,
         address winnigOfferAddress
-    ) external;
+        // address nftAddress,
+        // uint256 tokenId
+    ) external payable;
 }

@@ -1,11 +1,22 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.9;
 
-import "./CloudaxShared.sol";
+// import "./CloudaxShared.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "./interfaces/ICloudaxShared.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+// ================================
+// CUSTOM ERRORS
+// ================================
+error QuantityRequired(uint256 supply, uint256 minRequired);
+error InvalidAddress();
 
 
 contract AuctionFulfillment is
-    CloudaxShared
+    ReentrancyGuard,
+    Ownable
 {
 
     using SafeMath for uint256;
@@ -13,6 +24,9 @@ contract AuctionFulfillment is
 // -----------------------------------VARIABLES-----------------------------------
     // Auction index count
     uint256 internal _currentAuctionIndex;
+
+    // Made public for test purposes
+    ICloudaxShared public cloudaxShared;
 
      // Structure to define auction properties
     struct Auction {
@@ -37,8 +51,17 @@ contract AuctionFulfillment is
         AuctionStatus status;
     }
 
+    struct Collection{
+        address payable fundingRecipient;
+        uint256 creatorFee;
+        address owner;
+    }
+
     mapping(uint256 => Auction) internal _idToAuction;
     //Mapping of items to a ListedItem struct
+
+    //Mapping of collectionId to a collection struct
+    mapping(uint256 => Collection) public s_collection;
     
 
     event StartAuction(
@@ -60,6 +83,8 @@ contract AuctionFulfillment is
         uint256 numberOfBid,
         address indexed bidder
     );
+
+     event itemIdPaired(string indexed itemIdDB, uint256 indexed itemId);
 
      event NegativeEndAuction(
         uint256 indexed auctionId,
@@ -86,6 +111,8 @@ contract AuctionFulfillment is
 
     event EventCanceled(uint256 indexed auctionId, address indexed seller);
 
+    event SharedInterfaceChanged(ICloudaxShared oldAddress, address newAddress);
+
      enum AuctionStatus {
         DEFAULT,
         ACTIVE,
@@ -93,7 +120,9 @@ contract AuctionFulfillment is
         UNSUCCESSFULLY_ENDED
     }
 
-    constructor() {}
+    constructor(address _cloudaxShared) {
+        cloudaxShared = ICloudaxShared(_cloudaxShared);
+    }
 
      modifier AuctionIsActive(uint256 auctionId) {
         require(
@@ -101,6 +130,22 @@ contract AuctionFulfillment is
             "Auction already ended!"
         );
         _;
+    }
+
+    modifier isValidated(address fundingRecipient,uint256 supply){
+        if (fundingRecipient == address(0)) {
+            revert InvalidAddress();
+        }
+        // Check that the track's supply is more than zero(0).
+        if (supply <= 0) {
+            revert QuantityRequired({supply: supply, minRequired: 1});
+        }
+        _;
+    }
+
+    function setShared(address newAddress) external onlyOwner {
+        emit SharedInterfaceChanged(cloudaxShared, newAddress);
+        cloudaxShared = ICloudaxShared(newAddress);
     }
 
     /**
@@ -118,8 +163,7 @@ contract AuctionFulfillment is
         return _currentAuctionIndex;
     }
 
-
-    function listItemOnAuction(
+     function listItemOnAuction(
         uint256 collectionId,
         string memory itemId,
         address payable _fundingRecipient,
@@ -127,7 +171,9 @@ contract AuctionFulfillment is
         uint256 startPrice,
         uint256 reservedPrice,
         uint256 _supply,
-        uint256 duration
+        uint256 duration,
+        address nftItemAddress,
+        uint256 tokenId
         )
         external
         isValidated(_fundingRecipient,_supply)
@@ -146,71 +192,95 @@ contract AuctionFulfillment is
             reservedPrice >= startPrice,
             "reserved price should not be less than the starting price"
         );
-        _currentItemIndex++;
-        emit itemIdPaired(itemId, _nextItemId());
-        s_itemIdDBToItemId[itemId] = _nextItemId();
-        Collection memory collection = s_collection[collectionId];
-        // s_listedItems[address(this)][_nextItemId()] = ListedItem({
-        //     nftAddress: address(this),
-        //     numSold: 0,
-        //     royaltyBPS: collection.creatorFee,
-        //     fundingRecipient: _fundingRecipient,
-        //     supply: _supply,
-        //     price: startPrice,
-        //     itemId: _nextItemId(),
-        //     collectionId: collectionId
-        // });
-
-        // emit ItemCreated(
-        //     address(this),
-        //     _nextItemId(),
-        //     itemId,
-        //     _fundingRecipient,
-        //     startPrice,
-        //     _supply,
-        //     collection.creatorFee,
-        //     block.timestamp
-        // );
+        if(nftItemAddress == address(0))
+        {
+        cloudaxShared.increaseItemId();
+        emit itemIdPaired(itemId, cloudaxShared.nextItemId());
+        cloudaxShared.setItemId(itemId, cloudaxShared.nextItemId());
+        }
 
         uint256 day = 1 days;
         uint256 mul_duration = day.mul(duration);
+        uint256 startAmount = startPrice;
+        uint256 cId = collectionId;
+        uint256 rPrice = reservedPrice;
+        address fAddress = _fundingRecipient;
+        string memory uri = _tokenUri;
+        uint256 sply = _supply;
+        uint256 dur = mul_duration;
 
         _currentAuctionIndex++;
-        _idToAuction[_currentAuctionIndex] = Auction(
-            _currentAuctionIndex,
-            address(this),
-            address(ERC20Token),
-            _supply,
-            0,
-            startPrice,
-            reservedPrice,
-            collectionId,
-            _tokenUri,
-            block.timestamp,
-            _nextItemId(),
-            0,
-            _fundingRecipient,
-            0,
-            0,
-            payable(address(0)),
-            0,
-            mul_duration,
-            AuctionStatus.ACTIVE
-        );  
+        if(nftItemAddress == address(0)){
+            _idToAuction[_currentAuctionIndex] = Auction(
+                _currentAuctionIndex,
+                address(this),
+                address(cloudaxShared.getERC20Token()),
+                sply,
+                0,
+                startAmount,
+                rPrice,
+                cId,
+                uri,
+                block.timestamp,
+                cloudaxShared.nextItemId(),
+                0,
+                payable(fAddress),
+                0,
+                0,
+                payable(address(0)),
+                0,
+                dur,
+                AuctionStatus.ACTIVE
+            );  
 
-
-        emit StartAuction(
-            _nextAuctionId(), 
-            address(this), 
-            address(ERC20Token), 
-            _supply,
-            _nextItemId(),
-            msg.sender,
-            startPrice,
-            reservedPrice,
-            block.timestamp,
-            mul_duration
-        );  
+            emit StartAuction(
+                _nextAuctionId(), 
+                address(this), 
+                address(cloudaxShared.getERC20Token()), 
+                sply,
+                cloudaxShared.nextItemId(),
+                msg.sender,
+                startAmount,
+                rPrice,
+                block.timestamp,
+                dur
+            ); 
+        }else{
+                _idToAuction[_currentAuctionIndex] = Auction(
+                    _currentAuctionIndex,
+                    nftItemAddress,
+                    address(cloudaxShared.getERC20Token()),
+                    sply,
+                    0,
+                    startAmount,
+                    rPrice,
+                    cId,
+                    uri,
+                    block.timestamp,
+                    0,
+                    tokenId,
+                    payable(fAddress),
+                    0,
+                    0,
+                    payable(address(0)),
+                    0,
+                    dur,
+                    AuctionStatus.ACTIVE
+                );
+                emit StartAuction(
+                    _nextAuctionId(), 
+                    address(this), 
+                    address(cloudaxShared.getERC20Token()), 
+                    sply,
+                    cloudaxShared.nextItemId(),
+                    msg.sender,
+                    startAmount,
+                    rPrice,
+                    block.timestamp,
+                    dur
+                ); 
+        }
+  
     }
 
     function makeBid(uint256 quantity, uint256 price, uint256 auctionId)
@@ -235,7 +305,11 @@ contract AuctionFulfillment is
         );
 
         if (order.bidAmount != 0) {
-            _sendFunds(order.lastBidder, order.currentBidPrice);
+            // cloudaxShared.sendFunds(order.lastBidder, order.currentBidPrice);
+            cloudaxShared.getERC20Token().transfer(order.lastBidder, order.currentBidPrice);
+            cloudaxShared.getERC20Token().transferFrom(msg.sender, address(this), price);
+        }else{
+            cloudaxShared.getERC20Token().transferFrom(msg.sender, address(this), price);
         }
 
         order.currentBidPrice = price;
@@ -279,16 +353,22 @@ contract AuctionFulfillment is
         Collection memory collection = s_collection[order.collectionId];
 
         //Deduct the service fee
-        uint256 serviceFee = order.currentBidPrice.mul(SERVICE_FEE).div(100);
+        uint256 serviceFee = order.currentBidPrice.mul(cloudaxShared.getServiceFee()).div(100);
         uint256 royalty = order.currentBidPrice.mul(collection.creatorFee).div(100);
         uint256 finalAmount = order.currentBidPrice.sub(serviceFee.add(royalty));
 
   
-        s_platformEarning += serviceFee;
-        s_totalAmount += finalAmount;
-        _sendFunds(order.owner, finalAmount);
-        _sendFunds(collection.fundingRecipient, royalty);
-        safeMintOut(1, order.itemBaseURI, _nextItemId(), order.lastBidder); 
+        cloudaxShared.addPlatformEarning(serviceFee);
+        cloudaxShared.addTotalAmount(finalAmount);
+        // cloudaxShared.sendFunds(order.owner, finalAmount);
+        cloudaxShared.getERC20Token().transfer(order.owner, finalAmount);
+        // cloudaxShared.sendFunds(collection.fundingRecipient, royalty);
+        cloudaxShared.getERC20Token().transfer(collection.fundingRecipient, royalty);
+        if(order.addressNFTCollection == address(this)){
+            cloudaxShared.safeMintOut(1, order.itemBaseURI, cloudaxShared.nextItemId(), order.lastBidder); 
+        }else{
+            cloudaxShared.transferNft(order.addressNFTCollection, order.owner, order.lastBidder, order.tokenId);
+        }
         order.status = AuctionStatus.SUCCESSFUL_ENDED;
 
         emit PositiveEndAuction(
@@ -311,7 +391,8 @@ contract AuctionFulfillment is
         );
         _idToAuction[auctionId].status = AuctionStatus.UNSUCCESSFULLY_ENDED;
         if (_idToAuction[auctionId].bidAmount != 0) {
-            _sendFunds(_idToAuction[auctionId].lastBidder, _idToAuction[auctionId].currentBidPrice);
+            // cloudaxShared.sendFunds(_idToAuction[auctionId].lastBidder, _idToAuction[auctionId].currentBidPrice);
+            cloudaxShared.getERC20Token().transfer(_idToAuction[auctionId].lastBidder, _idToAuction[auctionId].currentBidPrice);
         }
     }
 

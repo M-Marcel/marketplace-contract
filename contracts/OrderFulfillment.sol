@@ -1,17 +1,31 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.9;
-// pragma solidity >=0.8.4 <0.9.0;
 
-import "./CloudaxShared.sol";
-import "./interfaces/IOrderFulfillment.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "./interfaces/ICloudaxShared.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+// ================================
+// CUSTOM ERRORS
+// ================================
+error QuantityRequired(uint256 supply, uint256 minRequired);
+error InvalidAddress();
+error InvalidItemId(uint256 itemId);
+error ItemSoldOut(uint256 supply, uint256 numSold);
+error NotEnoughNft(uint256 supply, uint256 numSold, uint256 purchaseQuantityRequest);
+error InsufficientFund(uint256 price, uint256 allowedFund);
 
-contract OrderFulfillment is 
-CloudaxShared,
-IOrderFulfillment 
+contract OrderFulfillment is
+    ReentrancyGuard,
+    Ownable 
 {
     using SafeMath for uint256;
 
     uint256 internal _currentOfferIndex;
+
+    // Made public for test purposes
+    ICloudaxShared public cloudaxShared;
+    
 
     // Structure to define "make an offer" properties
     struct OfferOrder {
@@ -27,8 +41,31 @@ IOrderFulfillment
         uint256 offerCount; // Number of offers placed on the item
     }
 
+    struct Collection{
+        address payable fundingRecipient;
+        uint256 creatorFee;
+        address owner;
+    }
+
+    // structs for an item to be listed
+    struct ListedItem {
+        address nftAddress;
+        uint256 numSold;
+        uint256 royaltyBPS;
+        address payable fundingRecipient;
+        uint256 supply; 
+        uint256 price;
+        uint256 itemId;
+        uint256 collectionId;   
+    }
+
     mapping(uint256 => OfferOrder) internal _idToOfferOrder;
     //Mapping of items to a SoldItem struct
+
+    //Mapping of collectionId to a collection struct
+    mapping(uint256 => Collection) public s_collection;
+
+    mapping(address => mapping(uint256 => ListedItem)) public s_listedItems;
 
 
     event OfferFulfilled(
@@ -44,7 +81,23 @@ IOrderFulfillment
         uint256 offerCount // Number of offers placed on the item
     );
 
-    constructor() {}
+    event SharedInterfaceChanged(ICloudaxShared oldAddress, address newAddress);
+
+    constructor(address _cloudaxShared) 
+    {
+        cloudaxShared = ICloudaxShared(_cloudaxShared);
+    }
+
+    modifier isValidated(address fundingRecipient,uint256 supply){
+        if (fundingRecipient == address(0)) {
+            revert InvalidAddress();
+        }
+        // Check that the track's supply is more than zero(0).
+        if (supply <= 0) {
+            revert QuantityRequired({supply: supply, minRequired: 1});
+        }
+        _;
+    }
 
     /**
      * @dev Returns the starting offer ID.
@@ -61,8 +114,13 @@ IOrderFulfillment
         return _currentOfferIndex;
     }
 
+    function setShared(address newAddress) external onlyOwner {
+        emit SharedInterfaceChanged(cloudaxShared, newAddress);
+        cloudaxShared = ICloudaxShared(newAddress);
+    }
+
     function fulfillOfferOrder(
-        address payable _fundingRecipient,
+        address payable fundingR,
         uint256 collectionId,
         string memory itemId,
         string memory _tokenUri,
@@ -71,46 +129,42 @@ IOrderFulfillment
         uint256 offerCount,
         uint256 offerPrice,
         address winnigOfferAddress
-        // address nftAddress,
-        // uint256 tokenId
-    ) external payable nonReentrant isValidated(_fundingRecipient, _supply) {
-        // uint256 id = s_itemIdDBToItemId[itemId];
+    ) external payable nonReentrant isValidated(fundingR, _supply) {
         require(_qty >= 1, "Must buy atleast one nft");
         require(
-            collectionId <= _nextCollectionId(),
+            collectionId <= cloudaxShared.nextCollectionId(),
             "Collection does not exist"
         );
           Collection memory collection = s_collection[collectionId];
         // if (tokenId == 0){
             ListedItem memory listings = s_listedItems[address(this)][
-                s_itemIdDBToItemId[itemId]
+                cloudaxShared.getItemId(itemId)
             ];
             // uint256 supply = listings.supply;
             if (
-                listings.itemId != _nextItemId() ||
+                listings.itemId != cloudaxShared.nextItemId() ||
                 listings.supply == 0 ||
-                _nextItemId() == 0
+                cloudaxShared.nextItemId() == 0
             ) {
-                _createItem(
+                address fAddress = fundingR;
+                cloudaxShared.createItem(
                     collectionId,
                     itemId,
-                    _fundingRecipient,
+                    payable(fAddress),
                     offerPrice,
                     _supply
                 );
             }
 
-            // uint256 itemID = _nextItemId();
-            ListedItem memory listing = s_listedItems[address(this)][_nextItemId()];
+            ListedItem memory listing = s_listedItems[address(this)][cloudaxShared.nextItemId()];
           
 
             // Check that the item's ID is not Zero(0).
-            if (_nextItemId() <= 0) {
-                revert InvalidItemId({itemId: _nextItemId()});
+            if (cloudaxShared.nextItemId() <= 0) {
+                revert InvalidItemId({itemId: cloudaxShared.nextItemId()});
             }
             // Check that there are still some copies or tokens of the item that are available for purchase.
             if (listing.supply <= listing.numSold) {
-                // s_idToItemStatus[_nextItemId()] = TokenStatus.SOLDOUT;
                 revert ItemSoldOut({
                     supply: listing.supply,
                     numSold: listing.numSold
@@ -134,54 +188,41 @@ IOrderFulfillment
 
             // Increment the number of copies or tokens sold from this Item.
             listing.numSold = listing.numSold + _qty;
-            s_listedItems[address(this)][_nextItemId()] = listing;
+            s_listedItems[address(this)][cloudaxShared.nextItemId()] = listing;
         
             // https://cloudaxnftmarketplace.xyz/metadata/[USER_ID]/[ITEM_ID]/[TOKEN_ID]
             // Where _tokenBaseURI = https://cloudaxnftmarketplace.xyz/metadata/[USER_ID]/[ITEM_ID]
             // Generating a metadata URL for the new copy of the ITEM or Token that was generated.
 
-            ERC20Token.transferFrom(winnigOfferAddress, address(this), offerPrice);
+            cloudaxShared.getERC20Token().transferFrom(winnigOfferAddress, address(this), offerPrice);
 
             //Deduct the service fee
-            uint256 serviceFee = msg.value.mul(SERVICE_FEE).div(100);
+            uint256 serviceFee = msg.value.mul(cloudaxShared.getServiceFee()).div(100); // no msg.value
             uint256 royalty = msg.value.mul(collection.creatorFee).div(100);
             uint256 finalAmount = msg.value.sub(serviceFee.add(royalty));
 
             // Adding the newly earned money to the total amount a user has earned from an Item.
-            // s_depositedForItem[_nextItemId()] += finalAmount; // optmize
-            s_platformEarning += serviceFee;
-            s_indivivdualEarningInPlatform[
-                listings.fundingRecipient
-            ] += finalAmount;
-            s_indivivdualEarningInPlatform[collection.fundingRecipient] += royalty;
-            s_totalAmount += msg.value;
+            cloudaxShared.addPlatformEarning(serviceFee);
+            cloudaxShared.setIndivivdualEarningInPlatform(listings.fundingRecipient, finalAmount);
+            cloudaxShared.setIndivivdualEarningInPlatform(collection.fundingRecipient, royalty);
+            cloudaxShared.addTotalAmount(msg.value);
 
-            // Send funds to the funding recipient.
-            ERC20Token.transferFrom(
-                address(this),
-                listings.fundingRecipient,
-                finalAmount
-            );
-            ERC20Token.transferFrom(
-                address(this),
-                collection.fundingRecipient,
-                royalty
-            );
+            cloudaxShared.getERC20Token().transfer(listings.fundingRecipient, finalAmount);
+            cloudaxShared.getERC20Token().transfer(collection.fundingRecipient, royalty);
 
             string memory uri = _tokenUri;
             uint256 qty = _qty;
 
             // Mint a new copy or token from the Item for the buyer
-            safeMint(_qty, uri, _nextItemId());
-            // s_idToItemStatus[_nextTokenId()] = TokenStatus.ACTIVE;
+            cloudaxShared.safeMint(qty, uri, cloudaxShared.nextItemId());
 
             _idToOfferOrder[_nextOfferId()] = OfferOrder({
                 index: _nextOfferId(),
                 nftAddress: address(this),
-                addressPaymentToken: address(ERC20Token),
-                tokenIdFrom: _nextTokenId(),
+                addressPaymentToken: address(cloudaxShared.getERC20Token()),
+                tokenIdFrom: cloudaxShared.getItemsSold(),
                 quantity: qty,
-                itemId: _nextItemId(),
+                itemId: cloudaxShared.nextItemId(),
                 winnigOfferAddress: payable(winnigOfferAddress),
                 creator: collection.fundingRecipient,
                 offerPrice: offerPrice,
@@ -195,185 +236,17 @@ IOrderFulfillment
             emit OfferFulfilled(
                 _nextOfferId(),
                 address(this),
-                address(ERC20Token),
-                _nextTokenId(),
+                address(cloudaxShared.getERC20Token()),
+                cloudaxShared.getItemsSold(),
                 qty,
-                _currentItemIndex,
+                cloudaxShared.getItemsCreated(),
                 receiver,
                 collection.fundingRecipient,
                 offerP,
                 offerC
             );
-            
-        // }
-        // else{
-        //     ListedToken memory listing = s_listedTokens[nftAddress][tokenId];
-        //     s_listedTokens[nftAddress][tokenId] = ListedToken(
-        //        nftAddress,
-        //         collection.creatorFee,
-        //         collection.fundingRecipient,
-        //         offerPrice,
-        //         collection.fundingRecipient,
-        //         0,
-        //         tokenId,
-        //         collectionId
-        //     ); 
-        // }
-        // s_soldItems[address(this)][_nextTokenId()] = SoldItem({
-        //     nftAddress: address(this),
-        //     tokenIdFrom: _nextTokenId(),
-        //     quantity: qty,
-        //     itemId: _nextItemId(),
-        //     buyer: payable(winnigOfferAddress),
-        //     creator: collection.fundingRecipient,
-        //     itemBaseURI: uri,
-        //     amountEarned: finalAmount
-        // });
-
-        
-
         
     }
 
-    // function fulfillOfferOrderResell(
-    //     address payable _fundingRecipient,
-    //     address nftItemAddress,
-    //     uint256 collectionId,
-    //     uint256 tokenId,
-    //     uint256 _supply,
-    //     uint256 offerCount,
-    //     uint256 offerPrice,
-    //     address winnigOfferAddress
-    // ) public payable nonReentrant isOwner(nftItemAddress, tokenId, msg.sender) {
-
-    //     require(
-    //         collectionId <= _nextCollectionId(),
-    //         "Collection does not exist"
-    //     );
-    //     require(
-    //         _fundingRecipient == msg.sender,
-    //         "Only the nft owner can receive payment for nft"
-    //     );
-    //     if (offerPrice <= 0) {
-    //         revert PriceMustBeAboveZero();
-    //     }
-
-    //     ListedToken memory listing = s_listedTokens[nftItemAddress][tokenId];
-    //     Collection memory collection = s_collection[collectionId];
-
-    //     uint256 serviceFee = msg.value.mul(SERVICE_FEE).div(100);
-    //     // uint256 fundingR = _fundingRecipient;
-    //     // uint256 colId = collectionId;
-    //     address nftAd = nftItemAddress;
-    //     // address thisAd = address(this);
-    //     // uint256 tID = tokenId;
-
-    //     if (nftAd == address(this)){
-    //         s_listedTokens[nftItemAddress][tokenId] = ListedToken(
-    //            nftAd,
-    //             collection.creatorFee,
-    //             collection.fundingRecipient,
-    //             offerPrice,
-    //             collection.fundingRecipient,
-    //             0,
-    //             tokenId,
-    //             collectionId
-    //         ); 
-
-    //             emit TokenListed
-    //         (
-    //             nftItemAddress,
-    //             tokenId,
-    //             0,
-    //             msg.sender,
-    //             offerPrice,
-    //             collection.fundingRecipient,
-    //             collection.creatorFee,
-    //             block.timestamp,
-    //             collectionId
-    //         );
-
-    //         //Deduct the service fee
-    //         // uint256 serviceFee = msg.value.mul(SERVICE_FEE).div(100);
-    //         uint256 royalty = msg.value.mul(listing.royaltyBPS).div(100);
-    //         uint256 finalAmount = msg.value.sub(serviceFee.add(royalty));
-
-    //         // Adding the newly earned money to the total amount a user has earned from an Item.
-    //         // s_depositedForItem[_nextItemId()] += finalAmount; // optm
-    //         s_platformEarning += serviceFee;
-    //         s_indivivdualEarningInPlatform[listing.creator] += finalAmount;
-    //         s_totalAmount += msg.value;
-
-    //         // Send funds to the funding recipient.
-    //         ERC20Token.transferFrom(address(this), listing.fundingRecipient, finalAmount);
-    //         ERC20Token.transferFrom(address(this), collection.fundingRecipient, royalty);
-    //     }
-
-    //     s_listedTokens[nftItemAddress][tokenId] = ListedToken(
-    //         nftItemAddress,
-    //         0,
-    //         _fundingRecipient,
-    //         offerPrice,
-    //         address(0),
-    //         0,
-    //         tokenId,
-    //         0
-    //     );
-
-    //        //     address nftAddress;
-    //     // uint256 royaltyBPS;
-    //     // address payable fundingRecipient;
-    //     // uint256 price;
-    //     // address creator;
-    //     // uint256 itemId;
-    //     // uint256 tokenId; 
-    //     // uint256 collectionId; 
-
-    //     // s_idToItemStatus[tokenId] = TokenStatus.ONSELL;
-
-    //     emit TokenListed
-    //     (
-    //         nftItemAddress,
-    //         tokenId,
-    //         0,
-    //         msg.sender,
-    //         offerPrice,
-    //         address(0),
-    //         0,
-    //         block.timestamp,
-    //         0
-    //     );
-
-    //     uint256 finalAmount = msg.value.sub(serviceFee);
-
-    //     // Update the deposited total for the item.
-    //     // Adding the newly earned money to the total amount a user has earned from an Item.
-    //     // s_depositedForItem[tokenId] += finalAmount;
-    //     s_indivivdualEarningInPlatform[
-    //         listing.creator
-    //     ] += finalAmount;
-    //     s_platformEarning += serviceFee;
-    //     s_totalAmount += msg.value;
-
-    //     // Send funds to the funding recipient.
-    //     ERC20Token.transferFrom(address(this), listing.fundingRecipient, finalAmount);
-
-    //     // transfer nft to buyer
-    //     IERC721A(nftItemAddress).safeTransferFrom(listing.creator, msg.sender, tokenId);
-
-    //     // s_idToItemStatus[tokenId] = TokenStatus.ACTIVE;
-
-    //     emit NftSold(
-    //         nftItemAddress,
-    //         tokenId,
-    //         0,
-    //         msg.sender,
-    //         listing.creator,
-    //         "",
-    //         finalAmount,
-    //         block.timestamp
-    //     );
-
-    // }
 }
  

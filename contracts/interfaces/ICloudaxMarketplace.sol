@@ -6,8 +6,6 @@ pragma solidity ^0.8.9;
 interface ICloudaxMarketplace {
     function setContractBaseURI(string memory __contractBaseURI) external;
 
-    function setERC20Token(address newToken) external;
-
     function buyItemCopy(
         address payable _fundingRecipient,
         uint256 collectionId,
