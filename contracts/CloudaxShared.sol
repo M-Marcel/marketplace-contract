@@ -7,6 +7,9 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./interfaces/ICloudaxShared.sol";
+import "./interfaces/ICloudaxMarketplace.sol";
+import "./interfaces/IAuctionFulfillment.sol";
+import "./interfaces/IOrderFulfillment.sol";
 
 // ================================
 // CUSTOM ERRORS
@@ -34,14 +37,25 @@ contract CloudaxShared is
     // The next token ID to be minted.
     uint256 internal _currentItemIndex;
     uint256 internal _currentCollectionIndex;
+    // % times 200 = 2%
     uint256 internal constant SERVICE_FEE = 2;
+    // uint256 internal constant auction = 2;
     uint256 internal s_platformEarning;
     uint256 internal s_totalAmount;
+
+    // address private marketplace;
+    // address private auction;
+    // address private offer;
 
    // Made public for test purposes
     address public marketplace;
     address public auction;
     address public offer;
+
+    // Made public for test purposes
+    ICloudaxMarketplace public cloudaxMarketplace;
+    IOrderFulfillment public cloudaxOffer;
+    IAuctionFulfillment public cloudaxAuction;
     
 
     // ================================
@@ -111,6 +125,15 @@ contract CloudaxShared is
         uint256 royaltyBPS,
         uint256 time
     );
+
+    //Emitted when a collection is created
+    event CollectionCreated(
+        uint256 collectionId,
+        address indexed fundingRecipient,
+        uint256 creatorFee,
+        address indexed owner,
+        uint256 time
+    );
     
     event itemIdPaired(string indexed itemIdDB, uint256 indexed itemId);
 
@@ -151,36 +174,43 @@ contract CloudaxShared is
         _;
     }
 
-    modifier isAuthorized() {
+    // modifier isAuthorized(address contractAddress) {
         
-        if (msg.sender != marketplace || msg.sender != auction || msg.sender != offer ) {
-            revert NotAuthorized();
-        }
-        _;
-    }
+    //     if (contractAddress != marketplace || contractAddress != offer || contractAddress != auction) {
+    //         revert NotAuthorized();
+    //     }
+    //     _;
+    // }
 
     function setERC20Token(address newToken) external onlyOwner {
         emit ERC20AddressChanged(address(ERC20Token), newToken);
         ERC20Token = IERC20(newToken);
     }
 
-    function getERC20Token() public isAuthorized() view returns(IERC20) {
+    function getERC20Token() public view returns(IERC20) {
         return ERC20Token;
+    }
+
+    function getMsgSender() public view returns(address) {
+        return msg.sender;
     }
 
     function setAuction(address newAddress) external onlyOwner {
         emit AddressChanged(auction, newAddress);
         auction = newAddress;
+        cloudaxAuction = IAuctionFulfillment(newAddress);
     }
 
     function setMarketplace(address newAddress) external onlyOwner {
         emit AddressChanged(marketplace, newAddress);
         marketplace = newAddress;
+        cloudaxMarketplace = ICloudaxMarketplace(newAddress);
     }
 
-    function setOffer(address newAddress) external  onlyOwner {
+    function setOffer(address newAddress) external onlyOwner {
         emit AddressChanged(offer, newAddress);
         offer = newAddress;
+        cloudaxOffer = IOrderFulfillment(newAddress);
     }
 
     /**
@@ -198,7 +228,10 @@ contract CloudaxShared is
         return _currentItemIndex;
     }
 
-    function increaseItemId() isAuthorized() public {
+    function increaseItemId(address contractAddress) 
+    public 
+    // isAuthorized(contractAddress) 
+    {
         _currentItemIndex++;
     }
 
@@ -213,12 +246,40 @@ contract CloudaxShared is
     /**
      * @dev Returns the next collection ID to be minted.
      */
-    function nextCollectionId() public view virtual returns (uint256) {
+    function nextCollectionId(address contractAddress) 
+    public 
+    // isAuthorized(contractAddress) 
+    view virtual returns (uint256) {
         return _currentCollectionIndex;
     }
 
-    function increaseCollectionId() isAuthorized() public {
+    function increaseCollectionId(address contractAddress) 
+    public 
+    // isAuthorized(contractAddress) 
+    {
          _currentCollectionIndex++;
+    }
+
+    function createCollection(
+        uint256 creatorFee,
+        address payable fundingRecipient,
+        address owner,
+        uint256 mappingId,
+        address contractAddress
+    ) external {
+
+        if (fundingRecipient == address(0)) {
+            revert InvalidAddress();
+        }
+
+        // increaseCollectionId();
+        s_collection[mappingId] = Collection({
+            fundingRecipient: fundingRecipient,
+            creatorFee: creatorFee,
+            owner: owner
+        });
+
+        emit CollectionCreated(nextCollectionId(contractAddress), fundingRecipient, creatorFee, owner, block.timestamp);
     }
 
     /// @notice Returns the CloudaxNFT Listing price
@@ -238,41 +299,50 @@ contract CloudaxShared is
         return _currentCollectionIndex;
     }
 
-    function getItemId(string memory itemId) public isAuthorized() view returns (uint256) {
+    function getItemId(string memory itemId) public view returns (uint256) {
         return s_itemIdDBToItemId[itemId];
     }
 
-    function setItemId(string memory itemId, uint256 Id) public isAuthorized() {
+    function setItemId(string memory itemId, uint256 Id) public {
          s_itemIdDBToItemId[itemId] = Id;
     }
 
-    function setIndivivdualEarningInPlatform(address user, uint256 amount) public isAuthorized() {
+    function setIndivivdualEarningInPlatform(address user, uint256 amount) public {
          s_indivivdualEarningInPlatform[user] += amount;
     }
 
-    function setPlatformEarning(uint256 amount) public isAuthorized() {
+    function setPlatformEarning(uint256 amount) public {
          s_platformEarning = amount;
     }
 
-    function addPlatformEarning(uint256 amount) public isAuthorized() {
+    function addPlatformEarning(uint256 amount) public {
          s_platformEarning += amount;
     }
 
-    function getPlatformEarning() public isAuthorized() view returns(uint256) {
+    function getPlatformEarning() public view returns(uint256) {
         return s_platformEarning;
     }
 
-    function setTotalAmount(uint256 amount) public isAuthorized() {
+    function setTotalAmount(uint256 amount) public {
          s_totalAmount = amount;
     }
 
-    function addTotalAmount(uint256 amount) public isAuthorized() {
+    function addTotalAmount(uint256 amount) public {
          s_totalAmount += amount;
     }
 
-    function getTotalAmount() public isAuthorized() view returns(uint256) {
+    function getTotalAmount() public view returns(uint256) {
         return s_totalAmount;
     }
+
+    function getThisAddress(address contractAddress) public pure returns(address) {
+        return contractAddress;
+    }
+
+    // s_platformEarning;
+    // s_totalAmount;
+
+    // s_tokensToItemToCollection
 
         /// @notice Creates a new NFT item.
     /// @param _fundingRecipient The account that will receive sales revenue.
@@ -284,7 +354,10 @@ contract CloudaxShared is
         address payable _fundingRecipient,
         uint256 _price,
         uint256 _supply
-    ) public isAuthorized() isValidated(_fundingRecipient,_supply) {
+    ) 
+    public 
+    isValidated(_fundingRecipient,_supply) 
+    {
 
         _currentItemIndex++;
         emit itemIdPaired(itemId, nextItemId());
@@ -300,6 +373,20 @@ contract CloudaxShared is
             itemId: nextItemId(),
             collectionId: collectionId
         });
+        uint256 cID = collectionId;
+
+        cloudaxOffer.listItem(
+            address(this),
+            0,
+            collection.creatorFee,
+            _fundingRecipient,
+            _supply,
+            _price,
+            nextItemId(),
+            cID,
+            address(this),
+            nextItemId()
+        );
 
         emit ItemCreated(
             address(this),
@@ -317,9 +404,10 @@ contract CloudaxShared is
     function safeMint(
         uint256 _qty,
         string memory _uri,
-        uint256 itemId
-    ) public isAuthorized() {
-        _safeMint(msg.sender, _qty);
+        uint256 itemId,
+        address contractAddress
+    ) public {
+        _safeMint(contractAddress, _qty);
         uint256 end = _nextTokenId();
         uint256 index = end - _qty;
         ListedItem memory listing = s_listedItems[address(this)][itemId];
@@ -338,7 +426,7 @@ contract CloudaxShared is
         string memory _uri,
         uint256 itemId,
         address recipient
-    ) public isAuthorized() {
+    ) public {
         _safeMint(recipient, _qty);
         uint256 end = _nextTokenId();
         uint256 index = end - _qty;
@@ -356,7 +444,7 @@ contract CloudaxShared is
     /// @notice Sends funds to an address
     /// @param _recipient The address to send funds to
     /// @param _amount The amount of funds to send
-    function sendFunds(address payable _recipient, uint256 _amount) public isAuthorized() {
+    function sendFunds(address payable _recipient, uint256 _amount) public {
         if (_amount <= 0) {
             revert CannotSendZero({fundTosend: _amount});
         }
@@ -384,7 +472,7 @@ contract CloudaxShared is
         address creator, 
         address sender, 
         uint256 tokenId
-    ) public isAuthorized() 
+    ) public 
     {
         IERC721A(nftAddress).safeTransferFrom(creator, sender, tokenId);
     }
@@ -394,8 +482,33 @@ contract CloudaxShared is
         address nftAddress, 
         uint256 tokenId, 
         address sender
-    ) public isAuthorized() isOwner(nftAddress, tokenId, sender){
+    ) public isOwner(nftAddress, tokenId, sender){
         
     }
 
+    function listToken
+    (
+        address nftAddress,
+        uint256 itemId,
+        uint256 tokenId,
+        address payable fundingRecipient,
+        uint256 price,
+        address creator,
+        uint256 royaltyBPS,
+        uint256 collectionId,
+        address mappingAddress,
+        uint256 mappingId
+    ) public
+        {
+            s_listedTokens[mappingAddress][mappingId] = ListedToken({
+                nftAddress: nftAddress,
+                itemId: itemId,
+                tokenId: tokenId,
+                fundingRecipient: fundingRecipient,
+                price: price,
+                creator: creator,
+                royaltyBPS: royaltyBPS,
+                collectionId: collectionId
+            });
+        }
 }

@@ -19,12 +19,13 @@ interface ICloudaxShared {
 
     function nextItemId() external returns (uint256);
 
-    function increaseItemId() external;
+    function increaseItemId(address contractAddress) external;
      
     function safeMint(
         uint256 _qty,
         string memory _uri,
-        uint256 itemId
+        uint256 itemId,
+        address contractAddress
     ) external;
 
     function safeMintOut(
@@ -34,7 +35,7 @@ interface ICloudaxShared {
         address recipient
     ) external;
 
-    function nextCollectionId() external returns (uint256);
+    function nextCollectionId(address contractAddress) external returns (uint256);
 
     function sendFunds(address payable _recipient, uint256 _amount) external;
 
@@ -58,7 +59,7 @@ interface ICloudaxShared {
         address sender
     ) external;
 
-    function increaseCollectionId() external;
+    function increaseCollectionId(address contractAddress) external;
 
     function getServiceFee() external returns(uint256);
 
@@ -95,4 +96,30 @@ interface ICloudaxShared {
     ) external;
 
     function getERC20Token() external returns(IERC20);
+
+    function getMsgSender() external returns(address);
+
+    function createCollection(
+        uint256 creatorFee,
+        address payable fundingRecipient,
+        address owner,
+        uint256 mappingId,
+        address contractAddress
+    ) external;
+
+    function listToken
+    (
+        address nftAddress,
+        uint256 itemId,
+        uint256 tokenId,
+        address payable fundingRecipient,
+        uint256 price,
+        address creator,
+        uint256 royaltyBPS,
+        uint256 collectionId,
+        address mappingAddress,
+        uint256 mappingId
+    ) external;
+
+    function getThisAddress(address contractAddress) external returns(address);
 }

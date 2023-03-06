@@ -132,7 +132,7 @@ contract OrderFulfillment is
     ) external payable nonReentrant isValidated(fundingR, _supply) {
         require(_qty >= 1, "Must buy atleast one nft");
         require(
-            collectionId <= cloudaxShared.nextCollectionId(),
+            collectionId <= cloudaxShared.nextCollectionId(address(cloudaxShared)),
             "Collection does not exist"
         );
           Collection memory collection = s_collection[collectionId];
@@ -156,6 +156,7 @@ contract OrderFulfillment is
                 );
             }
 
+            // uint256 itemID = nextItemId();
             ListedItem memory listing = s_listedItems[address(this)][cloudaxShared.nextItemId()];
           
 
@@ -165,6 +166,7 @@ contract OrderFulfillment is
             }
             // Check that there are still some copies or tokens of the item that are available for purchase.
             if (listing.supply <= listing.numSold) {
+                // s_idToItemStatus[nextItemId()] = TokenStatus.SOLDOUT;
                 revert ItemSoldOut({
                     supply: listing.supply,
                     numSold: listing.numSold
@@ -202,6 +204,7 @@ contract OrderFulfillment is
             uint256 finalAmount = msg.value.sub(serviceFee.add(royalty));
 
             // Adding the newly earned money to the total amount a user has earned from an Item.
+            // s_depositedForItem[nextItemId()] += finalAmount; // optmize
             cloudaxShared.addPlatformEarning(serviceFee);
             cloudaxShared.setIndivivdualEarningInPlatform(listings.fundingRecipient, finalAmount);
             cloudaxShared.setIndivivdualEarningInPlatform(collection.fundingRecipient, royalty);
@@ -214,7 +217,8 @@ contract OrderFulfillment is
             uint256 qty = _qty;
 
             // Mint a new copy or token from the Item for the buyer
-            cloudaxShared.safeMint(qty, uri, cloudaxShared.nextItemId());
+            cloudaxShared.safeMintOut(qty, uri, cloudaxShared.nextItemId(), winnigOfferAddress);
+            // s_idToItemStatus[_nextTokenId()] = TokenStatus.ACTIVE;
 
             _idToOfferOrder[_nextOfferId()] = OfferOrder({
                 index: _nextOfferId(),
@@ -247,6 +251,32 @@ contract OrderFulfillment is
             );
         
     }
+
+     function listItem
+    (
+        address nftAddress,
+        uint256 numSold,
+        uint256 royaltyBPS,
+        address payable fundingRecipient,
+        uint256 supply,
+        uint256 price,
+        uint256 itemId,
+        uint256 collectionId,
+        address mappingAddress,
+        uint256 mappingId
+    ) public
+        {
+            s_listedItems[mappingAddress][mappingId] = ListedItem({
+                nftAddress: nftAddress,
+                numSold: numSold,
+                royaltyBPS: royaltyBPS,
+                fundingRecipient: fundingRecipient,
+                supply: supply,
+                price: price,
+                itemId: itemId,
+                collectionId: collectionId
+            });
+        }
 
 }
  

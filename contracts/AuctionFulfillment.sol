@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.9;
 
-
+// import "./CloudaxShared.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./interfaces/ICloudaxShared.sol";
@@ -18,6 +18,8 @@ contract AuctionFulfillment is
     ReentrancyGuard,
     Ownable
 {
+
+    // 0xD7ACd2a9FD159E69Bb102A1ca21C9a3e3A5F771B
 
     using SafeMath for uint256;
 
@@ -194,7 +196,7 @@ contract AuctionFulfillment is
         );
         if(nftItemAddress == address(0))
         {
-        cloudaxShared.increaseItemId();
+        cloudaxShared.increaseItemId(address(this));
         emit itemIdPaired(itemId, cloudaxShared.nextItemId());
         cloudaxShared.setItemId(itemId, cloudaxShared.nextItemId());
         }
@@ -360,7 +362,9 @@ contract AuctionFulfillment is
   
         cloudaxShared.addPlatformEarning(serviceFee);
         cloudaxShared.addTotalAmount(finalAmount);
+        // cloudaxShared.sendFunds(order.owner, finalAmount);
         cloudaxShared.getERC20Token().transfer(order.owner, finalAmount);
+        // cloudaxShared.sendFunds(collection.fundingRecipient, royalty);
         cloudaxShared.getERC20Token().transfer(collection.fundingRecipient, royalty);
         if(order.addressNFTCollection == address(this)){
             cloudaxShared.safeMintOut(1, order.itemBaseURI, cloudaxShared.nextItemId(), order.lastBidder); 
