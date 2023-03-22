@@ -5,12 +5,11 @@ const { developmentChains } = require("../helper-hardhat-config")
 const { verify } = require("../utils/verify")
 
 module.exports = async function () {
-    // const { deploy, log } = deployments
-    // const { deployer } = await getNamedAccounts()
+    const { deploy, log } = deployments
+    const { deployer } = await getNamedAccounts()
 
     // const gas = await ethers.provider.getGasPrice()
-    const CloudaxNftMarketplace = await ethers.getContractFactory("CloudaxNftMarketplace")
-
+    const CloudaxNftMarketplace = await ethers.getContractFactory("Marketplace")
 
     // log("-----------------------------------------------")
 
@@ -18,12 +17,12 @@ module.exports = async function () {
 
     console.log("Deploying Cloudax...", cloudaxNftMarketplace.address)
 
-    // if (process.env.ETHERSCAN_API_KEY) {
-    //     console.log("Verifying Cloudax Marketplace...")
-    //     await verify(cloudaxNftMarketplace.address)
-    //     // }
-    //     console.log("--------------------------------cloudaxNftMarketplace up")
-    // }
+    if (process.env.ETHERSCAN_API_KEY) {
+        console.log("Verifying Cloudax Marketplace...")
+        await verify(cloudaxNftMarketplace.address)
+        // }
+        console.log("--------------------------------cloudaxNftMarketplace up")
+    }
 
     module.exports.tags = ["all", "cloudaxNftMarketplace"]
 }

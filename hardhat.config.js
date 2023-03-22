@@ -17,11 +17,11 @@ const MAINNET_RPC_URL =
   process.env.MAINNET_RPC_URL ||
   process.env.ALCHEMY_MAINNET_RPC_URL ||
   "https://eth-mainnet.alchemyapi.io/v2/your-api-key"
-const GOERLI_RPC_URL = process.env.GOERLI_RPC_URL || "https://eth-kovan.alchemyapi.io/v2/your-api-key"
-const BINANCE_SMARTCHAIN_MAINNET_RPC_URL = process.env.BINANCE_SMARTCHAIN_MAINNET_RPC_URL
-const BINANCE_SMARTCHAIN_TESTNET_RPC_URL = process.env.BINANCE_SMARTCHAIN_TESTNET_RPC_URL
-const POLYGON_MAINNET_RPC_URL =
-  process.env.POLYGON_MAINNET_RPC_URL || "https://polygon-mainnet.alchemyapi.io/v2/your-api-key"
+// const GOERLI_RPC_URL = process.env.GOERLI_RPC_URL || "https://eth-kovan.alchemyapi.io/v2/your-api-key"
+// const BINANCE_SMARTCHAIN_MAINNET_RPC_URL = process.env.BINANCE_SMARTCHAIN_MAINNET_RPC_URL
+// const BINANCE_SMARTCHAIN_TESTNET_RPC_URL = process.env.BINANCE_SMARTCHAIN_TESTNET_RPC_URL
+// const POLYGON_MAINNET_RPC_URL =
+//   process.env.POLYGON_MAINNET_RPC_URL || "https://polygon-mainnet.alchemyapi.io/v2/your-api-key"
 const PRIVATE_KEY = process.env.PRIVATE_KEY || "0x"
 // optional
 const MNEMONIC = process.env.MNEMONIC || "your mnemonic"
@@ -61,57 +61,57 @@ module.exports = {
       // gasLimit: ethers.utils.parseEther("1"),
       // gasPrice: ethers.utils.parseEther("1"),
     },
-    binanceSCTestnet: {
-      url: BINANCE_SMARTCHAIN_TESTNET_RPC_URL,
-      accounts: PRIVATE_KEY !== undefined ? [PRIVATE_KEY] : [],
-      // accounts: "9IIXU9KC848QTC4QJJEGWPGKA8QN1HU4Z7",
-      //   accounts: {
-      //     mnemonic: MNEMONIC,
-      //   },
-      saveDeployments: true,
-      chainId: 97,
-      blockConfirmations: 6,
-    },
-    goerli: {
-      url: GOERLI_RPC_URL,
-      accounts: PRIVATE_KEY !== undefined ? [PRIVATE_KEY] : [],
-      //   accounts: {
-      //     mnemonic: MNEMONIC,
-      //   },
-      saveDeployments: true,
-      chainId: 5,
-      blockConfirmations: 6,
-      gas: 210000000,
-      gasPrice: 800000000000,
-      blockGasLimit: 30902728800,
-    },
-    binanceSCMainnet: {
-      url: BINANCE_SMARTCHAIN_MAINNET_RPC_URL,
-      accounts: PRIVATE_KEY !== undefined ? [PRIVATE_KEY] : [],
-      //   accounts: {
-      //     mnemonic: MNEMONIC,
-      //   },
-      saveDeployments: true,
-      chainId: 56,
-      blockConfirmations: 6,
-    },
-    mainnet: {
-      url: MAINNET_RPC_URL,
-      accounts: PRIVATE_KEY !== undefined ? [PRIVATE_KEY] : [],
-      //   accounts: {
-      //     mnemonic: MNEMONIC,
-      //   },
-      saveDeployments: true,
-      chainId: 1,
-      blockConfirmations: 6,
-    },
-    polygon: {
-      url: POLYGON_MAINNET_RPC_URL,
-      accounts: PRIVATE_KEY !== undefined ? [PRIVATE_KEY] : [],
-      saveDeployments: true,
-      chainId: 137,
-      blockConfirmations: 6,
-    },
+    // binanceSCTestnet: {
+    //   url: BINANCE_SMARTCHAIN_TESTNET_RPC_URL,
+    //   accounts: PRIVATE_KEY !== undefined ? [PRIVATE_KEY] : [],
+    //   // accounts: "9IIXU9KC848QTC4QJJEGWPGKA8QN1HU4Z7",
+    //   //   accounts: {
+    //   //     mnemonic: MNEMONIC,
+    //   //   },
+    //   saveDeployments: true,
+    //   chainId: 97,
+    //   blockConfirmations: 6,
+    // },
+    // goerli: {
+    //   url: GOERLI_RPC_URL,
+    //   accounts: PRIVATE_KEY !== undefined ? [PRIVATE_KEY] : [],
+    //   //   accounts: {
+    //   //     mnemonic: MNEMONIC,
+    //   //   },
+    //   saveDeployments: true,
+    //   chainId: 5,
+    //   blockConfirmations: 6,
+    //   gas: 210000000,
+    //   gasPrice: 800000000000,
+    //   blockGasLimit: 30902728800,
+    // },
+    // binanceSCMainnet: {
+    //   url: BINANCE_SMARTCHAIN_MAINNET_RPC_URL,
+    //   accounts: PRIVATE_KEY !== undefined ? [PRIVATE_KEY] : [],
+    //   //   accounts: {
+    //   //     mnemonic: MNEMONIC,
+    //   //   },
+    //   saveDeployments: true,
+    //   chainId: 56,
+    //   blockConfirmations: 6,
+    // },
+    // mainnet: {
+    //   url: MAINNET_RPC_URL,
+    //   accounts: PRIVATE_KEY !== undefined ? [PRIVATE_KEY] : [],
+    //   //   accounts: {
+    //   //     mnemonic: MNEMONIC,
+    //   //   },
+    //   saveDeployments: true,
+    //   chainId: 1,
+    //   blockConfirmations: 6,
+    // },
+    // polygon: {
+    //   url: POLYGON_MAINNET_RPC_URL,
+    //   accounts: PRIVATE_KEY !== undefined ? [PRIVATE_KEY] : [],
+    //   saveDeployments: true,
+    //   chainId: 137,
+    //   blockConfirmations: 6,
+    // },
   },
   etherscan: {
     // npx hardhat verify --network <NETWORK> <CONTRACT_ADDRESS> <CONSTRUCTOR_PARAMETERS>
