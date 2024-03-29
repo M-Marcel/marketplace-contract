@@ -1,4 +1,4 @@
-# Diamond-3-Hardhat Implementation
+# Diamond-3-Hardhat Implementation on the NFT Marketplace (Based on Azuki NFT contract)
 
 This is an implementation for [EIP-2535 Diamond Standard](https://github.com/ethereum/EIPs/issues/2535). To learn about other implementations go here: https://github.com/mudgen/diamond
 
